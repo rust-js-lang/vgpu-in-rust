@@ -19,12 +19,15 @@ One reproducible downstream patch retains four outstanding fixes.
   invalid fractional/nonfinite/negative/out-of-range indices,
   exact React markup/context behavior, retained asset identity, and complete
   compiler patch reproducibility. The audit rejects unrecorded compiler edits.
-- Thirteen production-built Chromium checks pass: ten compare Rust and upstream
+- Fourteen production-built Chromium checks pass: ten compare Rust and upstream
   setup tabs, covering copy/reset, rapid switches, layout stability, denied or
   unavailable clipboard access, unmount cleanup and mobile reduced motion.
-  Three require an actual WebGPU adapter: all 44 retained prism shaders compile,
+  Four require an actual WebGPU adapter: all 44 retained prism shaders compile,
   an invalid shader reports errors, and the Rust fullscreen pass copies exact
-  RGBA pixels without reversing the image.
+  RGBA pixels without reversing the image. The additive spectral pass renders
+  the actual generated mesh with native vertex attributes and blend settings;
+  pixel readback detects red/blue output and verifies that a zero reveal aperture
+  removes all light.
 - Previously ported scene and UI modules regenerate without JavaScript changes.
   The camera preserves shared view-projection identity and matches original
   Float32 matrices exactly. A compensated norm removes the measured cancellation
@@ -42,7 +45,7 @@ wrong-length targets throw the original native RangeError and exact message.
 Both Rust runtimes test topology ranges, finite vertices, scratch overwrite and
 wavelength-subdivision flux invariance.
 
-These checks prove components and GPU building blocks. The prism scene passes,
+These checks prove components and GPU building blocks. The complete prism scene graph,
 complete landing root and full-page visual comparison remain unfinished.
 
 ## Current compiler patch

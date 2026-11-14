@@ -5,4 +5,5 @@ pub mod hero_tabs;
 pub mod inline_code;
 pub mod light_mesh;
 pub mod shader;
+pub mod spectral_pass;
 pub mod wordmark;
