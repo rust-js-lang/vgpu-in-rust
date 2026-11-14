@@ -1,4 +1,4 @@
-//! Both rasterized glass interfaces from pipelines/dark/create-graph.ts.
+//! Rasterized glass interfaces and the light-theme accent layer.
 use crate::shader::{ShaderSource, shader_module};
 use react::webapi::{
     GPUBlendComponent, GPUBlendState, GPUColorTargetState, GPUDevice, GPUFragmentState,
@@ -7,11 +7,17 @@ use react::webapi::{
 };
 use vgpu_prism::prism_mesh::PRISM_VERTEX_STRIDE;
 
+pub enum GlassLayer {
+    Back,
+    Front,
+    Accent,
+}
+
 pub async fn glass_pipeline(
     device: &GPUDevice,
     source: &ShaderSource,
     format: &str,
-    back_face: bool,
+    layer: GlassLayer,
     sample_count: u32,
     label: &str,
 ) -> &'static GPURenderPipeline {
@@ -47,7 +53,11 @@ pub async fn glass_pipeline(
                 }]),
             },
             primitive: Some(GPUPrimitiveState {
-                cull_mode: Some(if back_face { "front" } else { "back" }),
+                cull_mode: Some(if matches!(layer, GlassLayer::Back) {
+                    "front"
+                } else {
+                    "back"
+                }),
                 ..Default::default()
             }),
             depth_stencil: None,
@@ -62,7 +72,7 @@ pub async fn glass_pipeline(
                 constants: None,
                 targets: &[GPUColorTargetState {
                     format,
-                    blend: back_face.then_some(GPUBlendState {
+                    blend: (!matches!(layer, GlassLayer::Front)).then_some(GPUBlendState {
                         color: over,
                         alpha: over,
                     }),

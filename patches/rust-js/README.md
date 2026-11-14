@@ -1,10 +1,21 @@
-# Compiler gap history
+# Downstream compiler fix
 
-Current published compiler pin: `27e3f76eceecd50d3b2d839ecc8b22f3842a926c`.
+The gitlink is the authority for the published compiler revision:
+`59b8850fffaee6c9eb33b56753f5646d50d4df47`.
 
-All six previous downstream fixes are upstream-owned. No local compiler patch
-is applied. The submodule checkout is clean; setup and compile use the published
-compiler directly. Historical patches remain in this repository's Git history.
+The single retained patch fixes [#1785](https://github.com/rust-js-lang/rust-js/issues/1785):
+a global binding cast to a function pointer retains its known function origin
+when asked with is_defined/is_function. The same origin owner serves standalone
+and tuple-path casts. Unknown/reassigned pointers are not guessed. Missing
+globals are neither evaluated nor called before their typeof check.
+
+Run `bun run patch:compiler` after submodule initialization. The script applies
+only to the pinned revision and proves an already-applied stack in a disposable
+copy. The regression proves absent/present/nonfunction globals, namespaced
+guards, one getter read, zero calls and nonbinding/ambiguous refusals. Five new
+or retargeted mutations are caught. Documentation is included in the patch.
+
+Earlier fixes are upstream-owned and no longer overridden:
 
 | Issue | Published implementation |
 | --- | --- |
@@ -14,8 +25,8 @@ compiler directly. Historical patches remain in this repository's Git history.
 | #1775 untagged conversion bodies | `a02f938b0` |
 | #1778 nested derived Debug | `75abfed4b` |
 | #1779 WebGPU flag namespaces | `7d1c48f3c` |
+| #1784 generic JS erasure field liveness | `670a6bca3` |
 
-The earlier native Error-family, nullable-promise and async-declaration fixes
-also remain upstream-owned. Future compiler gaps still follow AGENTS.md:
-reproduce, file an issue, patch the private submodule, retain the patch here,
-and adopt the upstream replacement when available.
+The upstream liveness fix makes strict application Clippy pass with no warnings
+or suppressions. Historical patches remain in Git history. Validation and
+outstanding milestone gates are recorded in docs/validation.md.

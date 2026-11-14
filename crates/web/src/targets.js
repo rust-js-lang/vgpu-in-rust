@@ -55,6 +55,13 @@ export function createTexture(device, size, format, sampleCount, mipLevels, usag
 }
 
 export const RenderTarget = {
+  signature(renderTarget) {
+    return {
+      format: renderTarget.format,
+      sampleCount: renderTarget.sampleCount,
+    };
+  },
+
   colorAttachment(renderTarget, load, clear) {
     return {
       view: renderTarget.multisampledView ?? renderTarget.view,

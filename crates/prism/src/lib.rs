@@ -45,3 +45,10 @@ pub mod normalize_controls;
 pub mod runtime_state;
 
 pub mod color;
+
+pub mod shadow_mesh;
+
+pub mod light_uniforms;
+
+pub mod light_asset_math;
+pub mod light_assets;

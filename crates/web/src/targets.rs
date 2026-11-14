@@ -4,6 +4,13 @@ use react::webapi::{
     gpu_texture_usage,
 };
 
+/// Pipeline compatibility does not require ownership of a target texture.
+/// A canvas attachment supplies the same format/sample contract as an offscreen target.
+pub struct RenderSignature<'a> {
+    pub format: &'a str,
+    pub sample_count: u32,
+}
+
 pub struct RenderTarget {
     pub texture: &'static GPUTexture,
     pub view: &'static GPUTextureView,
@@ -81,6 +88,13 @@ pub fn create_texture(
 }
 
 impl RenderTarget {
+    pub fn signature(&self) -> RenderSignature<'_> {
+        RenderSignature {
+            format: &self.format,
+            sample_count: self.sample_count,
+        }
+    }
+
     pub fn color_attachment<'a>(
         &self,
         load: bool,

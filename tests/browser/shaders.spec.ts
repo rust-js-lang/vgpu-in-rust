@@ -170,7 +170,7 @@ test('Rust glass interfaces compile against native mesh attributes in single-sam
       for(const back of [false,true])for(const samples of [1,4]){
         const suffix=back?'/shared/glass/glass-back.wgsl':'/shared/glass/glass.wgsl';
         const shader=Object.entries(fixture.sources).find(([name])=>name.endsWith(suffix))![1];
-        await fixture.glassPipeline(device,shader,'rgba16float',back,samples,'glass-test');
+        await fixture.glassPipeline(device,shader,'rgba16float',back?'Back':'Front',samples,'glass-test');
       }
       return (await device.popErrorScope())?.message??null;
     }finally{device.destroy();}

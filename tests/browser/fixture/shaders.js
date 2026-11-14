@@ -52,3 +52,13 @@ Object.assign(window.shaderFixture,{BoundPipeline});
 
 import {createDarkGraph,DarkGraph} from '../../../crates/web/src/dark_graph.js';
 Object.assign(window.shaderFixture,{createDarkGraph,DarkGraph});
+
+import * as lightAssets from '../../../crates/web/src/light_assets.js';
+Object.assign(window.shaderFixture,lightAssets);
+
+import wallMaskUrl from '../../../assets/prism-light/wall-global-light-mask.webp?url';
+Object.assign(window.shaderFixture,{wallMaskUrl});
+
+import {createShadowGeometry,shadowPipeline,encodeShadow,ShadowBuffers} from '../../../crates/web/src/shadow.js';
+import {prismShadowUniforms,lightGlassAccentUniforms} from '../../../crates/prism/src/light_uniforms.js';
+Object.assign(window.shaderFixture,{createShadowGeometry,shadowPipeline,encodeShadow,ShadowBuffers,prismShadowUniforms,lightGlassAccentUniforms});

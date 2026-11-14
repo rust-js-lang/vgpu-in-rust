@@ -50,3 +50,9 @@ A successful build alone is insufficient. Completion needs an accessible Pages U
 Tests compare the full original dark pipeline, not only isolated pass helpers.
 Reference gateways export actual upstream functions exclusively and stay inside
 browser test fixtures; production Rust has no upstream app TypeScript dependency.
+
+Light assets own shared preload, native compute baking, CPU recovery and their
+texture cleanup. The pure core owns procedural pixels, mip values and swept
+shadow geometry. The shadow draw owns its distinct u32 indexed layout. Target
+compatibility is represented by RenderSignature, independent of texture ownership;
+glass fixed-function state is selected by GlassLayer (Back, Front, Accent).

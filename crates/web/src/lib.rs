@@ -27,3 +27,7 @@ mod resources;
 pub mod dark_graph;
 
 pub mod wireframe;
+
+pub mod light_assets;
+
+pub mod shadow;

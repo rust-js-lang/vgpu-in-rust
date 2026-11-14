@@ -47,8 +47,8 @@ test('Rust exterior/internal spectral light, environment and two-interface MSAA 
       const lightValues=value(fixture.prepareShaderBindings(device,lightShader,[{name:'scene',value:sceneParams}],'spectral-light'));
       resources.push(lightValues);
       const lightGroup=value(fixture.ShaderBindings.bind(lightValues,device,light,[],'spectral-light'));
-      const back=await fixture.glassPipeline(device,backShader,'rgba16float',true,1,'glass-back');
-      const front=await fixture.glassPipeline(device,frontShader,'rgba16float',false,4,'glass-front');
+      const back=await fixture.glassPipeline(device,backShader,'rgba16float','Back',1,'glass-back');
+      const front=await fixture.glassPipeline(device,frontShader,'rgba16float','Front',4,'glass-front');
       const copy=await fixture.fullscreenPipeline(device,fixture.fullscreenVertex(device),fixture.shaderModule(device,copyShader,'glass-copy'),'rgba16float',4,'glass-copy');
       const backValues=value(fixture.prepareShaderBindings(device,backShader,[{name:'params',value:params}],'glass-back'));
       const frontValues=value(fixture.prepareShaderBindings(device,frontShader,[{name:'params',value:params}],'glass-front'));

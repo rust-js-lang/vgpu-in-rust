@@ -3,13 +3,13 @@
 import type { ShaderSource } from "@vgpu/wgsl";
 import type { PrismControls } from "../../prism/src/controls.js";
 import type { BoundPipeline, NamedResource, UniformInput } from "./bindings.js";
-import type { RenderTarget } from "./targets.js";
+import type { RenderSignature, RenderTarget } from "./targets.js";
 
 /**
  * Compile against the target's exact format and sample count before allocating
  * uniforms. Mesh and particle draws share BoundPipeline's binding ownership.
  */
-export function createEffect(device: GPUDevice, source: ShaderSource, target: RenderTarget, inputs: UniformInput[], resources: NamedResource[], label: string): Promise<any>;
+export function createEffect(device: GPUDevice, source: ShaderSource, target: RenderSignature, inputs: UniformInput[], resources: NamedResource[], label: string): Promise<any>;
 
 export function encodeEffect(effect: BoundPipeline, encoder: GPUCommandEncoder, target: RenderTarget): void;
 

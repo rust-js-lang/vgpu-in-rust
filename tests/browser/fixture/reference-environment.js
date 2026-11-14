@@ -16,3 +16,9 @@ export {PRISM_TRIANGLE,PRISM_FRONT_Z,PRISM_LIGHT_PLANE_Z} from '@reference/app/[
 export {createPrismRuntime,prepareRuntimeEnvironment,destroyPrismRuntime} from '@reference/app/[lang]/(home)/components/prism-background/runtime/resources.ts';
 export {setRuntimeControls,setRuntimeLampAim,setRuntimeOrbit,setRuntimeFramingViewport,resizeRuntime} from '@reference/app/[lang]/(home)/components/prism-background/runtime/state.ts';
 export {createDarkPipeline} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/dark/index.ts';
+
+export {bakeLightAssetTextures} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/light/assets/bake.ts';
+export {loadLightAssetTextures,destroyLightAssetTextures} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/light/assets/loader.ts';
+
+export {createPrismShadowGeometry,prismShadowUniforms} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/light/passes/shadow/tuning.ts';
+export {LIGHT_GLASS_ACCENT_TUNING} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/light/passes/glass-accent/tuning.ts';

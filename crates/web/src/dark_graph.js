@@ -100,12 +100,12 @@ async function buildDarkGraph(device, runtime, settings, allocations) {
   );
   const pipelines = await Promise.all([
     lightPipeline(device, LIGHT, "rgba16float", `${label}.light`),
-    glassPipeline(device, BACK, "rgba16float", true, 1, `${label}.glass-back`),
+    glassPipeline(device, BACK, "rgba16float", "Back", 1, `${label}.glass-back`),
     glassPipeline(
       device,
       FRONT,
       "rgba16float",
-      false,
+      "Front",
       settings.sampleCount,
       `${label}.glass-front`,
     ),
@@ -204,7 +204,7 @@ async function buildDarkGraph(device, runtime, settings, allocations) {
   const result$3 = await createEffect(
     device,
     COPY,
-    scene,
+    RenderTarget.signature(scene),
     [],
     [
       {

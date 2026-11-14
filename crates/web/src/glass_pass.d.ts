@@ -2,4 +2,6 @@
 
 import type { ShaderSource } from "@vgpu/wgsl";
 
-export function glassPipeline(device: GPUDevice, source: ShaderSource, format: string, backFace: boolean, sampleCount: number, label: string): Promise<GPURenderPipeline>;
+export type GlassLayer = "Back" | "Front" | "Accent";
+
+export function glassPipeline(device: GPUDevice, source: ShaderSource, format: string, layer: GlassLayer, sampleCount: number, label: string): Promise<GPURenderPipeline>;

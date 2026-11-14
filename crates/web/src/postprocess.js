@@ -86,7 +86,7 @@ async function buildDarkPostprocess(device, scene, sampler, settings, allocation
       const result$1 = await createEffect(
         device,
         EXTRACT,
-        $index(levels, 0).vertical,
+        RenderTarget.signature($index(levels, 0).vertical),
         [UniformInput.new("params", { threshold })],
         [
           {
@@ -112,7 +112,7 @@ async function buildDarkPostprocess(device, scene, sampler, settings, allocation
         const result = await createEffect(
           device,
           DOWNSAMPLE,
-          target,
+          RenderTarget.signature(target),
           [
             UniformInput.new("params", {
               sourceTexelSize: [1 / scene.size[0], 1 / scene.size[1]],
@@ -156,7 +156,7 @@ async function buildDarkPostprocess(device, scene, sampler, settings, allocation
       const result$2 = await createEffect(
         device,
         lowQuality ? COMPOSITE_LOW : COMPOSITE,
-        $index(levels, 0).horizontal,
+        RenderTarget.signature($index(levels, 0).horizontal),
         [
           UniformInput.new("params", {
             radius: bloomSpread(radius, 0.25, 3),
@@ -182,7 +182,7 @@ async function buildDarkPostprocess(device, scene, sampler, settings, allocation
       const result$3 = await createEffect(
         device,
         PRESENT,
-        presentation,
+        RenderTarget.signature(presentation),
         [UniformInput.new("params", { bloomStrength: lowQuality ? 0.15 : strength })],
         [
           {
@@ -208,7 +208,7 @@ async function buildDarkPostprocess(device, scene, sampler, settings, allocation
       result = await createEffect(
         device,
         COPY,
-        presentation,
+        RenderTarget.signature(presentation),
         [UniformInput.new("params", presentationRevealUniforms("dark", 1))],
         [
           {
@@ -251,7 +251,7 @@ async function buildDarkPostprocess(device, scene, sampler, settings, allocation
     const result$2 = await createEffect(
       device,
       bloomUsesPairs(level, true) ? PAIRED : BLUR,
-      horizontal,
+      RenderTarget.signature(horizontal),
       [UniformInput.new("params", bloomBlurUniforms(level, true, size.slice()))],
       [
         {
@@ -273,7 +273,7 @@ async function buildDarkPostprocess(device, scene, sampler, settings, allocation
     const result$3 = await createEffect(
       device,
       PAIRED,
-      vertical,
+      RenderTarget.signature(vertical),
       [UniformInput.new("params", bloomBlurUniforms(level, false, size.slice()))],
       [
         {

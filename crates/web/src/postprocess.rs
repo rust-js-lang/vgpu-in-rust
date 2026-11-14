@@ -3,7 +3,7 @@ use crate::bindings::{BoundPipeline, NamedResource, UniformInput};
 use crate::fullscreen::{encode_fullscreen, fullscreen_pipeline, fullscreen_vertex};
 use crate::resources::Allocations;
 use crate::shader::{ShaderSource, shader_module};
-use crate::targets::RenderTarget;
+use crate::targets::{RenderSignature, RenderTarget};
 use react::webapi::{GPUCommandEncoder, GPUDevice, GPURenderPassDescriptor, GPUSampler};
 use vgpu_prism::bloom::{
     BLOOM_LEVEL_FACTORS, bloom_blur_uniforms, bloom_level_size, bloom_spread, bloom_uses_pairs,
@@ -50,7 +50,7 @@ struct Downsample {
 pub async fn create_effect(
     device: &GPUDevice,
     source: &'static ShaderSource,
-    target: &RenderTarget,
+    target: RenderSignature<'_>,
     inputs: &[UniformInput<'_>],
     resources: &[NamedResource<'_>],
     label: &str,
@@ -59,7 +59,7 @@ pub async fn create_effect(
         device,
         fullscreen_vertex(device),
         shader_module(device, source, label),
-        &target.format,
+        target.format,
         target.sample_count,
         label,
     )
@@ -181,7 +181,7 @@ async fn build_dark_postprocess(
             } else {
                 BLUR
             },
-            &horizontal,
+            horizontal.signature(),
             &[UniformInput::new(
                 "params",
                 bloom_blur_uniforms(level, true, size),
@@ -203,7 +203,7 @@ async fn build_dark_postprocess(
         let blur_vertical = create_effect(
             device,
             PAIRED,
-            &vertical,
+            vertical.signature(),
             &[UniformInput::new(
                 "params",
                 bloom_blur_uniforms(level, false, size),
@@ -232,7 +232,7 @@ async fn build_dark_postprocess(
     let extract = create_effect(
         device,
         EXTRACT,
-        &levels[0].vertical,
+        levels[0].vertical.signature(),
         &[UniformInput::new("params", Threshold { threshold })],
         &[
             NamedResource {
@@ -256,7 +256,7 @@ async fn build_dark_postprocess(
             create_effect(
                 device,
                 DOWNSAMPLE,
-                target,
+                target.signature(),
                 &[UniformInput::new(
                     "params",
                     Downsample {
@@ -310,7 +310,7 @@ async fn build_dark_postprocess(
         } else {
             COMPOSITE
         },
-        &levels[0].horizontal,
+        levels[0].horizontal.signature(),
         &[UniformInput::new(
             "params",
             Composite {
@@ -333,7 +333,7 @@ async fn build_dark_postprocess(
     let present = create_effect(
         device,
         PRESENT,
-        &presentation,
+        presentation.signature(),
         &[UniformInput::new(
             "params",
             Present {
@@ -361,7 +361,7 @@ async fn build_dark_postprocess(
     let copy = create_effect(
         device,
         COPY,
-        &presentation,
+        presentation.signature(),
         &[UniformInput::new(
             "params",
             presentation_reveal_uniforms(PrismTheme::Dark, 1.0),

@@ -1,0 +1,421 @@
+diff --git a/TESTS.md b/TESTS.md
+index 27c09e6..ab8707a 100644
+--- a/TESTS.md
++++ b/TESTS.md
+@@ -51,3 +51,10 @@ As of 2026-10-30, `main` at `120772e2`; times are CI's, check run 41022723550.
+ - **On the Mac**, each command has a timeout of about twice its usual time, and runs on all the cores: the suite in parallel groups took about 3 minutes (2026-10-30), the corpus in 8 parts 90 s (AGENTS.md). `bun run check:fast --all`, each file and each of the corpus's 12 parts a job of its pool, takes about 3 min with no change on the 12-core M6, the cores 92% busy, and about 6 min with an iterator change's rows (2026-11-07, DEVELOPMENT.md); run again where the compiler's build is the same, a change to the tests or the docs alone, about 1 min 50 s, each compile kept by its inputs given again (`test/compiles.ts`, ADR 1099, #874). Plain `bun run check:fast`, the inner loop's, runs each plain suite's file as a job and, by the test map (`bun run test-map`, about 130 s), only the files and corpus cases that ran a function the change touches: 53–74 s of a one-statement change to tidy, drops, the bindings or an iterator's code, 121 s to the runtime's with its iterator rows (2026-11-07, ADR 1101, #877); `test/test-map.test.ts` holds what a change picks.
+ 
+ To recount: the test totals are the `Ran N tests` lines in a check's `test (k/2)` logs. The corpus is `ls test/corpus/*.rs | wc -l`, the mutations are `grep -rc 'name:' scripts/mutations`, and the rustc counts are the line counts of `test/rustc-*.txt`.
++
++Downstream #1785 coverage (2026-11-14): two tests in
++test/lowering-defined-casts.test.ts cover single/copy/tuple/Math/browser binding
++casts, absence without reads/calls, namespaced guards and ambiguous/nonbinding
++refusals. Three new origin/value/uniqueness mutations and two retargeted tuple
++mutations hold the shared owner. Historical counts above are not a downstream
++suite recount.
+diff --git a/docs/decisions/0597-whether-the-host-has-a-global-is-is-defined.md b/docs/decisions/0597-whether-the-host-has-a-global-is-is-defined.md
+index d42edbc..da89ed4 100644
+--- a/docs/decisions/0597-whether-the-host-has-a-global-is-is-defined.md
++++ b/docs/decisions/0597-whether-the-host-has-a-global-is-is-defined.md
+@@ -126,3 +126,20 @@ An `Option` static is now what its type says of the value, `undefined` or
+ - The guide's [global scope](../guide/interop/global-scope.md#a-global-some-hosts-lack).
+ - Mutations: the `typeof` unwritten, of any path, of the crate's own
+   function.
++
++## A binding coerced to a function pointer (#1785)
++
++A valid fn-pointer coercion/cast used to instantiate anonymous impl Trait
++parameters does not change which global is named. One origin rule now follows
++the unique MIR initializer and copies to the reified function item, for both a
++single feature-test argument and each tuple-path step. Unknown or reassigned
++pointers are not guessed. The existing binding/global/Math rules then apply;
++ordinary Rust functions remain refused, including behind a cast.
++
++is_function uses the same origin before deciding whether an argument is a
++callback value. A known namespaced binding must retain all missing-root guards,
++not read the namespace first. This is case A of ADR 0262: rustc checks the
++coercion and the same global is asked without evaluating or calling it.
++There is no native host-global counterpart; regression tests vary actual JS
++globals and getters and prove one read and zero calls. Mutations remove origin
++recovery, confuse binding/value tests, and pick an ambiguous initializer.
+diff --git a/docs/guide/interop/global-scope.md b/docs/guide/interop/global-scope.md
+index d7992af..0f5e26f 100644
+--- a/docs/guide/interop/global-scope.md
++++ b/docs/guide/interop/global-scope.md
+@@ -224,6 +224,14 @@ export function later(task) {
+   read before ([ADR 0647](../../decisions/0647-type-name-as-react-writes-it.md)); a reference
+   to a static, `&webapi::performance`, is refused
+   ([ADR 0645](../../decisions/0645-is-defined-of-a-static-is-of-the-static.md)).
++- **A binding cast to a fn pointer still names that binding.** This instantiates
++  an anonymous impl Trait parameter that no turbofish can name, for example
++  js::is_defined(webapi::global::create_image_bitmap as fn(&'static webapi::Blob,
++  Option<webapi::ImageBitmapOptions<'static>>) -> js::Promise<&'static webapi::ImageBitmap>).
++  Copies retaining that one initializer work as well, and tuple-path casts use
++  the same rule. A pointer with unknown or multiple definitions is not guessed;
++  the crate's own function does not become a host binding through a cast
++  (ADR 0597, amended, #1785).
+ - **Each part of a path is asked**, `js::is_defined(webapi::Performance::now)`
+   of the one global that type is, `typeof performance !== "undefined" &&
+   typeof performance.now !== "undefined"`: a host may lack any of them.
+diff --git a/scripts/mutations/lower/mir/calls/defined.ts b/scripts/mutations/lower/mir/calls/defined.ts
+index 92d9747..0840812 100644
+--- a/scripts/mutations/lower/mir/calls/defined.ts
++++ b/scripts/mutations/lower/mir/calls/defined.ts
+@@ -218,7 +218,7 @@ export const mutations: Mutation[] = [
+   {
+     name: "is-function-asks-each-part",
+     breaks:
+-      "`js::is_function(Performance::now)` asks its last part alone, `typeof performance.now === \"function\"`, which throws a `ReferenceError` where the host hasn't `performance`, where Rust is told `false` (rd320, ADR 0942 amended)",
++      '`js::is_function(Performance::now)` asks its last part alone, `typeof performance.now === "function"`, which throws a `ReferenceError` where the host hasn\'t `performance`, where Rust is told `false` (rd320, ADR 0942 amended)',
+     file: "src/lower/mir/calls/defined.rs",
+     find: "                _ if k + 1 == parts.len() || from_value || !(k == 0 && every_host_has(first)) => {\n",
+     replace:
+@@ -234,9 +234,8 @@ export const mutations: Mutation[] = [
+     breaks:
+       "`js::is_function((style, CSSStyleDeclaration::set_property as fn(..)))`, a method no turbofish names, is refused as a step of no method (rd154)",
+     file: "src/lower/mir/calls/defined.rs",
+-    find: "                ty::FnPtr(..) => cast_from(k).unwrap_or(step),\n",
+-    replace:
+-      "                ty::FnPtr(..) if false => cast_from(k).unwrap_or(step),\n",
++    find: "        if !matches!(given.kind(), ty::FnPtr(..)) {\n",
++    replace: "        if true || !matches!(given.kind(), ty::FnPtr(..)) {\n",
+     tests: ["test/lowering-is-function.test.ts", "-t", "path from a value"],
+   },
+   {
+@@ -244,8 +243,8 @@ export const mutations: Mutation[] = [
+     breaks:
+       "a step's `fn` pointer MIR copies, `_5 = copy _6`, isn't followed to its cast, so hideInstance's test is refused (rd154)",
+     file: "src/lower/mir/calls/defined.rs",
+-    find: "                    Rvalue::Use(copied, _) => item = copied,\n",
+-    replace: "                    Rvalue::Use(..) => return None,\n",
++    find: "                Some(Rvalue::Use(copied, _)) => at = copied,\n",
++    replace: "                Some(Rvalue::Use(..)) => return given,\n",
+     tests: ["test/lowering-is-function.test.ts", "-t", "path from a value"],
+   },
+   {
+@@ -300,7 +299,8 @@ export const mutations: Mutation[] = [
+       "`js::is_defined(js::date::new)` asks nothing of `Date`, so it's a call of the binding, not a test (ADR 0942)",
+     file: "src/lower/mir/calls/defined.rs",
+     find: "                _ if k + 1 == parts.len() || from_value || !(k == 0 && every_host_has(first)) => {\n",
+-    replace: "                _ if from_value || !(k == 0 && every_host_has(first)) => {\n",
++    replace:
++      "                _ if from_value || !(k == 0 && every_host_has(first)) => {\n",
+     tests: [
+       "test/lowering-is-function.test.ts",
+       "-t",
+@@ -454,4 +454,32 @@ export const mutations: Mutation[] = [
+       "js::is_object is whether",
+     ],
+   },
++  {
++    name: "defined-global-cast-origin-lost",
++    breaks:
++      "a known global fn pointer cast is treated as an unknown pointer instead of the same binding (#1785)",
++    file: "src/lower/mir/calls/defined.rs",
++    find: "        let given = self.named_function(body, &arg.node);\n",
++    replace: "        let given = arg.node.ty(&body.local_decls, tcx);\n",
++    tests: ["test/lowering-defined-casts.test.ts"],
++  },
++  {
++    name: "defined-global-cast-read-as-value",
++    breaks:
++      "a cast namespaced binding is read as a callback value, losing the absent-root guard (#1785)",
++    file: "src/lower/mir/calls/defined.rs",
++    find: "            && self.function_given(self.named_function(body, &arg.node))\n",
++    replace:
++      "            && self.function_given(arg.node.ty(&body.local_decls, tcx))\n",
++    tests: ["test/lowering-defined-casts.test.ts"],
++  },
++  {
++    name: "defined-global-cast-ambiguous-origin-picked",
++    breaks:
++      "the first of multiple function-pointer definitions is mistaken for one certain global (#1785)",
++    file: "src/lower/mir/calls/defined.rs",
++    find: "        (Some(value), None) => Some(value),\n",
++    replace: "        (Some(value), _) => Some(value),\n",
++    tests: ["test/lowering-defined-casts.test.ts"],
++  },
+ ];
+diff --git a/src/lower/mir/calls/defined.rs b/src/lower/mir/calls/defined.rs
+index dd0b313..0beb99d 100644
+--- a/src/lower/mir/calls/defined.rs
++++ b/src/lower/mir/calls/defined.rs
+@@ -66,7 +66,7 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+         let Some(arg) = args.first() else {
+             return self.mir_defined_parts(None, None, asked, span);
+         };
+-        let given = arg.node.ty(&body.local_decls, tcx);
++        let given = self.named_function(body, &arg.node);
+         // A std function that's `Math`'s, its function's, `typeof
+         // Math.clz32 !== "undefined"` (ADR 0887).
+         if let Some((f, f_args)) = crate::lower::fn_def(given)
+@@ -202,48 +202,59 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+         tuple: &Operand<'tcx>,
+         steps: &[Ty<'tcx>],
+     ) -> Vec<Ty<'tcx>> {
+-        let assigned = |local: mir::Local| {
+-            let mut found = (body.basic_blocks.iter())
+-                .flat_map(|block| &block.statements)
+-                .filter_map(|s| match &s.kind {
+-                    StatementKind::Assign(assign) if assign.0.as_local() == Some(local) => Some(&assign.1),
+-                    _ => None,
+-                });
+-            match (found.next(), found.next()) {
+-                (Some(rvalue), None) => Some(rvalue),
+-                _ => None,
+-            }
+-        };
+-        let items = match tuple.place().and_then(|place| place.as_local()).and_then(assigned) {
++        let items = match tuple
++            .place()
++            .and_then(|place| place.as_local())
++            .and_then(|local| assigned_once(body, local))
++        {
+             Some(Rvalue::Aggregate(kind, items)) if matches!(**kind, mir::AggregateKind::Tuple) => Some(items),
+             _ => None,
+         };
+-        // Through the copies MIR makes of the cast, `_5 = copy _6`.
+-        let cast_from = |k: usize| {
+-            let mut item = items?.get(rustc_abi::FieldIdx::from_usize(k))?;
+-            loop {
+-                match assigned(item.place()?.as_local()?)? {
+-                    Rvalue::Use(copied, _) => item = copied,
+-                    Rvalue::Cast(
+-                        mir::CastKind::PointerCoercion(ty::adjustment::PointerCoercion::ReifyFnPointer(_), _),
+-                        from,
+-                        _,
+-                    ) => {
+-                        let from = from.ty(&body.local_decls, self.tcx);
+-                        return crate::lower::fn_def(from).map(|_| from);
+-                    }
+-                    _ => return None,
+-                }
+-            }
+-        };
+-        (steps.iter().enumerate())
+-            .map(|(k, &step)| match step.kind() {
+-                ty::FnPtr(..) => cast_from(k).unwrap_or(step),
+-                _ => step,
++        steps
++            .iter()
++            .enumerate()
++            .map(|(k, &step)| {
++                items
++                    .and_then(|items| items.get(rustc_abi::FieldIdx::from_usize(k)))
++                    .map(|item| self.named_function(body, item))
++                    .unwrap_or(step)
+             })
+             .collect()
+     }
+ 
++    /// A known function item behind a fn-pointer coercion, the same whether a
++    /// feature test names it alone or as a tuple's step. Only one assignment
++    /// per local is followed; an unknown/reassigned pointer stays a value.
++    fn named_function(&self, body: &mir::Body<'tcx>, operand: &Operand<'tcx>) -> Ty<'tcx> {
++        let given = operand.ty(&body.local_decls, self.tcx);
++        if !matches!(given.kind(), ty::FnPtr(..)) {
++            return given;
++        }
++        let mut at = operand;
++        let mut seen = Vec::new();
++        loop {
++            let Some(local) = at.place().and_then(|place| place.as_local()) else {
++                return given;
++            };
++            if seen.contains(&local) {
++                return given;
++            }
++            seen.push(local);
++            match assigned_once(body, local) {
++                Some(Rvalue::Use(copied, _)) => at = copied,
++                Some(Rvalue::Cast(
++                    mir::CastKind::PointerCoercion(ty::adjustment::PointerCoercion::ReifyFnPointer(_), _),
++                    from,
++                    _,
++                )) => {
++                    let from = from.ty(&body.local_decls, self.tcx);
++                    return crate::lower::fn_def(from).map(|_| from).unwrap_or(given);
++                }
++                _ => return given,
++            }
++        }
++    }
++
+     /// `js::is_number` of what's a number in Rust, `f64`, or an `Option`
+     /// of one, as a getter's or a static's is (rd195); `js::is_object` of
+     /// what's no number, text, `bool` or function (rd282): of what isn't,
+@@ -314,7 +325,7 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+         let tcx = self.tcx;
+         let [arg] = args else { return false };
+         matches!(bindings::js_form(tcx, def_id), bindings::JsForm::Asks(Asked::Function))
+-            && self.function_given(arg.node.ty(&body.local_decls, tcx))
++            && self.function_given(self.named_function(body, &arg.node))
+             && self
+                 .static_given(body, &arg.node)
+                 .filter(|&s| tcx.is_foreign_item(s))
+@@ -551,6 +562,22 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+     }
+ }
+ 
++/// One unambiguous initializer, never a guess between control-flow definitions.
++fn assigned_once<'a, 'tcx>(body: &'a mir::Body<'tcx>, local: mir::Local) -> Option<&'a Rvalue<'tcx>> {
++    let mut found =
++        body.basic_blocks
++            .iter()
++            .flat_map(|block| &block.statements)
++            .filter_map(|statement| match &statement.kind {
++                StatementKind::Assign(assign) if assign.0.as_local() == Some(local) => Some(&assign.1),
++                _ => None,
++            });
++    match (found.next(), found.next()) {
++        (Some(value), None) => Some(value),
++        _ => None,
++    }
++}
++
+ /// What a method binding reads of its receiver, which `js::is_defined`
+ /// asks of: its method's or its property's name, or the path of the
+ /// constructor it calls `new` of, `ErrorEvent` of `window.ErrorEvent`
+diff --git a/test/lowering-defined-casts.test.ts b/test/lowering-defined-casts.test.ts
+new file mode 100644
+index 0000000..e0fb777
+--- /dev/null
++++ b/test/lowering-defined-casts.test.ts
+@@ -0,0 +1,137 @@
++import { beforeAll, expect, test } from "bun:test";
++import { readFileSync, writeFileSync } from "node:fs";
++import { join } from "node:path";
++import { runSync } from "./child";
++import { buildReact, compiler, fixture, root, run, target } from "./support";
++beforeAll(buildReact, 600_000);
++const withWeb = [
++  "--",
++  "--edition",
++  "2024",
++  "--extern",
++  `js=${join(target, "libjs.rmeta")}`,
++  "--extern",
++  `webapi=${join(target, "libwebapi.rmeta")}`,
++  "-L",
++  target,
++];
++
++test("a global binding cast to a function pointer is asked without reading or calling it", async () => {
++  const dir = fixture("defined-global-casts");
++  writeFileSync(
++    join(dir, "lib.rs"),
++    `#[cfg_attr(rust_js, rust_js::link_name = "rustJsCastFunction")]
++pub fn optional(input: impl js::IntoUnknown) { unreachable!() }
++#[cfg_attr(rust_js, rust_js::link_name = "rustJsCastNamespace.hook")]
++pub fn namespaced(input: impl js::IntoUnknown) { unreachable!() }
++pub fn guarded() -> bool { js::is_function(namespaced as fn(&'static str)) }
++pub fn direct() -> bool { js::is_defined(optional as fn(&'static str)) }
++pub fn callable() -> bool { js::is_function(optional as fn(&'static str)) }
++pub fn copied() -> bool {
++    let first = optional as fn(&'static str);
++    let second = first;
++    js::is_defined(second)
++}
++pub fn path() -> bool { js::is_defined((optional as fn(&'static str),)) }
++pub fn math() -> bool { js::is_defined(u32::leading_zeros as fn(u32) -> u32) }
++pub fn bitmap() -> bool {
++    js::is_defined(webapi::global::create_image_bitmap as fn(&'static webapi::Blob, Option<webapi::ImageBitmapOptions<'static>>) -> js::Promise<&'static webapi::ImageBitmap>)
++}
++`,
++  );
++  run([compiler, join(dir, "lib.rs"), "-o", join(dir, "lib.js"), ...withWeb]);
++  const text = readFileSync(join(dir, "lib.js"), "utf8");
++  expect(text).toContain('return typeof rustJsCastFunction !== "undefined";');
++  expect(text).toContain('return typeof rustJsCastFunction === "function";');
++  expect(text).toContain('return typeof createImageBitmap !== "undefined";');
++  expect(text).toContain('return typeof Math.clz32 !== "undefined";');
++  const globals = globalThis as Record<string, unknown>;
++  const bitmap = Object.getOwnPropertyDescriptor(
++    globalThis,
++    "createImageBitmap",
++  );
++  delete globals.rustJsCastFunction;
++  delete globals.rustJsCastNamespace;
++  delete globals.createImageBitmap;
++  try {
++    const lib = await import(join(dir, "lib.js"));
++    expect([
++      lib.direct(),
++      lib.callable(),
++      lib.copied(),
++      lib.path(),
++      lib.bitmap(),
++      lib.math(),
++    ]).toEqual([false, false, false, false, false, true]);
++    expect(lib.guarded()).toBe(false);
++    let reads = 0,
++      calls = 0;
++    Object.defineProperty(globalThis, "rustJsCastFunction", {
++      configurable: true,
++      get() {
++        reads++;
++        return () => {
++          calls++;
++        };
++      },
++    });
++    for (const name of ["direct", "callable", "copied", "path"]) {
++      const before = reads;
++      expect(lib[name]()).toBe(true);
++      expect(reads - before).toBe(1);
++    }
++    expect(calls).toBe(0);
++    Object.defineProperty(globalThis, "rustJsCastFunction", {
++      configurable: true,
++      value: 0,
++    });
++    expect([lib.direct(), lib.callable(), lib.copied(), lib.path()]).toEqual([
++      true,
++      false,
++      true,
++      true,
++    ]);
++    globals.createImageBitmap = () => {};
++    expect(lib.bitmap()).toBe(true);
++    globals.rustJsCastNamespace = { hook: () => {} };
++    expect(lib.guarded()).toBe(true);
++  } finally {
++    delete globals.rustJsCastFunction;
++    delete globals.createImageBitmap;
++    if (bitmap) Object.defineProperty(globalThis, "createImageBitmap", bitmap);
++  }
++});
++
++test("a cast cannot make an ordinary function or an unknown pointer a global binding", () => {
++  const dir = fixture("defined-nonbinding-casts");
++  for (const [name, source] of [
++    [
++      "ordinary",
++      "fn ordinary(_: u32) {} pub fn ask() -> bool { js::is_defined(ordinary as fn(u32)) }",
++    ],
++    ["unknown", "pub fn ask(value: fn(u32)) -> bool { js::is_defined(value) }"],
++    [
++      "ordinary-function",
++      "fn ordinary(_: u32) {} pub fn ask() -> bool { js::is_function(ordinary as fn(u32)) }",
++    ],
++    [
++      "ambiguous",
++      '#[cfg_attr(rust_js, rust_js::link_name = "oneGlobal")] fn first(_: u32) { unreachable!() } #[cfg_attr(rust_js, rust_js::link_name = "anotherGlobal")] fn second(_: u32) { unreachable!() } pub fn ask(flag: bool) -> bool { let pointer: fn(u32); if flag { pointer = first; } else { pointer = second; } js::is_defined(pointer) }',
++    ],
++  ]) {
++    writeFileSync(join(dir, "lib.rs"), source);
++    const result = runSync(
++      [
++        compiler,
++        join(dir, "lib.rs"),
++        "-o",
++        join(dir, name + ".js"),
++        ...withWeb,
++      ],
++      root,
++      30000,
++    );
++    expect(result.code).not.toBe(0);
++    expect(result.stderr).toContain("of what isn't a JS global's binding");
++  }
++});

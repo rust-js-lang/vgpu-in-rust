@@ -3,7 +3,7 @@ use crate::bindings::{BoundPipeline, NamedResource, UniformInput};
 use crate::dust::{create_dust_draw, encode_dust};
 use crate::fullscreen::encode_fullscreen;
 use crate::geometry::encode_prism;
-use crate::glass_pass::glass_pipeline;
+use crate::glass_pass::{GlassLayer, glass_pipeline};
 use crate::postprocess::{
     DarkPostprocess, PostprocessSettings, create_dark_postprocess, create_effect,
 };
@@ -149,7 +149,7 @@ async fn build_dark_graph(
             device,
             BACK,
             "rgba16float",
-            true,
+            GlassLayer::Back,
             1,
             &format!("{label}.glass-back"),
         )),
@@ -157,7 +157,7 @@ async fn build_dark_graph(
             device,
             FRONT,
             "rgba16float",
-            false,
+            GlassLayer::Front,
             settings.sample_count,
             &format!("{label}.glass-front"),
         )),
@@ -254,7 +254,7 @@ async fn build_dark_graph(
     let copy = create_effect(
         device,
         COPY,
-        &scene,
+        scene.signature(),
         &[],
         &[NamedResource {
             name: "sceneTexture",

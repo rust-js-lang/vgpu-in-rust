@@ -6,6 +6,7 @@ import {sceneUniforms,glassUniforms,schlickFresnelF0} from '../crates/prism/src/
 import {normalizeControls} from '../crates/prism/src/normalize_controls.js';
 import {buildLightMesh} from '../crates/web/src/light_mesh.js';
 import {darkWallClear,srgbToLinear} from '../crates/prism/src/color.js';
+import * as lightUniforms from '../crates/prism/src/light_uniforms.js';
 import {RuntimeState} from '../crates/prism/src/runtime_state.js';
 import {cameraView} from '../crates/prism/src/camera.js';
 import {lightMeshLayout} from '../crates/prism/src/light_mesh.js';
@@ -15,7 +16,7 @@ const upstream=resolve(process.env.VGPU_UPSTREAM_DIR??'../vgpu');
 const source=resolve(upstream,'apps/docs/app/[lang]/(home)/components/prism-background');
 const output=resolve(import.meta.dir,'../node_modules/.cache/vgpu-reference-uniforms');
 mkdirSync(output,{recursive:true});
-await Bun.write(output+'/entry.ts','export * from '+JSON.stringify(source+'/runtime/uniforms.ts')+'; export * from '+JSON.stringify(source+'/runtime/state.ts')+'; export {normalizeControls} from '+JSON.stringify(source+'/runtime/normalize-controls.ts')+'; export {cameraView as referenceCameraView} from '+JSON.stringify(source+'/scene/camera.ts')+'; export {darkWallClear,srgbToLinear} from '+JSON.stringify(source+'/pipelines/dark/passes/wall/clear.ts')+';');
+await Bun.write(output+'/entry.ts','export * from '+JSON.stringify(source+'/runtime/uniforms.ts')+'; export * from '+JSON.stringify(source+'/runtime/state.ts')+'; export {normalizeControls} from '+JSON.stringify(source+'/runtime/normalize-controls.ts')+'; export {cameraView as referenceCameraView} from '+JSON.stringify(source+'/scene/camera.ts')+'; export {darkWallClear,srgbToLinear} from '+JSON.stringify(source+'/pipelines/dark/passes/wall/clear.ts')+'; export * from '+JSON.stringify(source+'/pipelines/light/uniforms.ts')+'; export {prismShadowUniforms} from '+JSON.stringify(source+'/pipelines/light/passes/shadow/tuning.ts')+'; export {lightGlassAccentUniforms} from '+JSON.stringify(source+'/pipelines/light/passes/glass-accent/uniforms.ts')+';');
 const built=await Bun.build({entrypoints:[output+'/entry.ts'],outdir:output+'/out',target:'bun',format:'esm',
   plugins:[{name:'pure-uniform-reference',setup(build){
     build.onResolve({filter:/^vgpu\/scene$/},()=>({path:'scene',namespace:'original-scene'}));
@@ -23,7 +24,7 @@ const built=await Bun.build({entrypoints:[output+'/entry.ts'],outdir:output+'/ou
       'export {group} from '+JSON.stringify(resolve(upstream,'packages/vgpu-api/src/scene/nodes.ts'))+';\n'+
       'export {perspective,viewMatrices} from '+JSON.stringify(resolve(upstream,'packages/vgpu-api/src/scene/camera-state.ts'))+';'}));
     build.onResolve({filter:/^@vgpu\/core$/},()=>({path:resolve(upstream,'packages/core/src/errors.ts')}));
-    build.onLoad({filter:/\/(scene\/prism-mesh|environment\/texture)\.ts$/},({path})=>{
+    build.onLoad({filter:/\/(scene\/prism-mesh|environment\/texture|shadow\/mesh)\.ts$/},({path})=>{
       // Only pure exports are reachable from uniforms. Remove imports used by
       // unreachable GPU upload/bake functions; all reference bodies and
       // constants remain verbatim. No renderer behavior is substituted.
@@ -155,4 +156,16 @@ test('dark wall clear preserves strict color parsing and the original sRGB trans
   for(const color of ['#000000','#305070','aB80fF','#ffffff','#fff','ééé','#ffffff\n',' #305070','3050700'])for(const view of ['glass','wall','back','caustic'])
     expect(darkWallClear(color,view)).toEqual(reference.darkWallClear(color,view));
   for(const value of [-1,0,0.04045,0.040450001,0.5,1,2,NaN,Infinity])expect(srgbToLinear(value)).toBe(reference.srgbToLinear(value));
+});
+
+test('light wall, caustic, shadow, accent and tone mapping values preserve the original shader schemas',()=>{
+  for(const size of [[1280,720],[390,844]])for(const color of ['#ffffff','#305070','aB80fF','#fff','#ffffff\n','ééé'])for(const tone of ['aces','neutral','reinhard','clamp']){
+    const state=RuntimeState.new(size,lightMeshLayout(64,12));state.controls.wallColor=color;state.controls.lightMode.output.toneMapping=tone;
+    state.controls.lightMode.wall.normalStrength=0.73;state.controls.lightMode.caustic.normalElevation=19;
+    RuntimeState.setOrbit(state,0.3,-0.2);
+    for(const [actual,original]of [[lightUniforms.lightWallUniforms,reference.lightWallUniforms],[lightUniforms.lightCausticUniforms,reference.lightCausticUniforms]])expect(plain(actual(state))).toEqual(plain(original(state)));
+    expect(lightUniforms.prismShadowUniforms(state.view.viewProjection)).toEqual(reference.prismShadowUniforms(state.view.viewProjection));
+    for(const reveal of [-1,0,0.23,1,2,NaN])expect(lightUniforms.lightPresentUniforms(state,reveal)).toEqual(reference.lightPresentUniforms(state,reveal));
+  }
+  expect(lightUniforms.lightGlassAccentUniforms()).toEqual(reference.lightGlassAccentUniforms());
 });
