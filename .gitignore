@@ -8,3 +8,8 @@
 .DS_Store
 
 /public/prism-gpu-benchmarks/
+
+/assets/generated/static-images.json
+/public/examples/eve/*.w*.q*.avif
+/public/examples/eve/*.w*.q*.webp
+/public/examples/eve/*.w*.q*.png

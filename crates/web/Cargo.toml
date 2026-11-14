@@ -10,5 +10,7 @@ vgpu-prism = { path = "../prism" }
 js = { package = "rust-js-builtins", path = "../../rust-js/builtins" }
 react = { package = "rust-js-react", path = "../../rust-js/react" }
 
+next = { package = "rust-js-next", path = "../../rust-js/next" }
+
 [lints]
 workspace = true

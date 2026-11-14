@@ -44,6 +44,10 @@ pub mod browser_renderer;
 
 pub mod auto_quality;
 pub mod button;
+pub mod ci_run_output;
+pub mod deferred_image;
+pub mod eve_video;
 pub mod hero;
+pub mod one_shader_every_surface;
 pub mod prism_background;
 pub mod quality_logging;

@@ -1,7 +1,7 @@
 # Compiler fixes adopted upstream
 
 The published submodule gitlink is the authority for the compiler revision.
-One downstream fix is retained for [#1790](https://github.com/rust-js-lang/rust-js/issues/1790): optional Battery Status API bindings. The canonical WebIDL generator, generated bindings, regression and documentation are included in 0001-battery-status.patch. Setup/compile applies it idempotently and refuses an unknown tree. Earlier fixes remain in Git history.
+The Battery Status API fix is published at 618662df7 (#1790), so its patch and application helper are retired. No downstream compiler source patch remains. The imported JSX props wrapper regression for [#1794](https://github.com/rust-js-lang/rust-js/issues/1794) is retained under regressions; its fix is pending.
 
 | Issue | Published implementation |
 | --- | --- |
@@ -14,6 +14,7 @@ One downstream fix is retained for [#1790](https://github.com/rust-js-lang/rust-
 | #1784 generic JS erasure field liveness | 670a6bca3 |
 | #1785 global binding function-pointer feature checks | c4aa4e5d5 |
 | #1786 guarded classification of known binding casts | 4c58cdcf6 |
+| #1790 Battery Status API and ambient declarations | 618662df7 |
 
 Claude relayed #1786 through agent-hub. Its published implementation replaces
 the last patch, downstream mutation and patch-application helper. Unknown
