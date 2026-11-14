@@ -62,10 +62,10 @@ test('Rust exterior/internal spectral light, environment and two-interface MSAA 
       const a=encoder.beginRenderPass({colorAttachments:[fixture.RenderTarget.colorAttachment(background,false,[0,0,0,1])]});
       fixture.encodeLight(a,light,lightGroup,lightBuffer,0,layout.whiteVertices);
       fixture.encodeLight(a,light,lightGroup,lightBuffer,layout.outgoingFirstVertex,layout.outgoingVertices);
-      fixture.encodeGlass(a,back,backGroup,geometry);
+      fixture.encodePrism(a,back,backGroup,geometry);
       fixture.encodeLight(a,light,lightGroup,lightBuffer,layout.internalFirstVertex,layout.internalVertices);a.end();
       const b=encoder.beginRenderPass({colorAttachments:[fixture.RenderTarget.colorAttachment(scene,false,[0,0,0,1])]});
-      fixture.encodeFullscreen(b,copy,copyGroup);fixture.encodeGlass(b,front,frontGroup,geometry);b.end();
+      fixture.encodeFullscreen(b,copy,copyGroup);fixture.encodePrism(b,front,frontGroup,geometry);b.end();
       device.queue.submit([encoder.finish()]);
 
       const expectedBack=reference.draw(gpu,{shader:backShader,geometry:expectedGeometry,cull:'front',depth:false,blend:'premultiplied'});

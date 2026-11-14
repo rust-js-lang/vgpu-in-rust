@@ -14,7 +14,7 @@ Error-family fixes are used unchanged.
 Passing application checks:
 
 - 26 native Rust tests and the same 26 compiled JavaScript tests.
-- 40 app tests with 160,463 assertions: scene optics, framing,
+- 41 app tests with 160,508 assertions: scene optics, framing,
   interaction, exact rounded mesh vertices/topology, exact Float32 camera
   matrices, spectral layouts/vertices/flux, retained upload identity, native
   RangeErrors, React markup/context, retained assets, bloom kernels/pairing and
@@ -31,9 +31,9 @@ Passing application checks:
   claimed.
 - Invalid uniform values allocate no GPU resource. Rejected updates preserve the
   previous upload, and valid updates retain the same buffer.
-- 27 production-built Chromium checks. Ten cover setup-tab parity, copy/reset,
+- 32 production-built Chromium checks. Ten cover setup-tab parity, copy/reset,
   rapid transitions, layout stability, unavailable/denied clipboard, reduced
-  motion, mobile sizing and unmount cleanup. Seventeen require a real WebGPU adapter:
+  motion, mobile sizing and unmount cleanup. Twenty-two require a real WebGPU adapter:
   all 44 retained shaders compile; malformed shader diagnostics work; the Rust
   fullscreen pass copies exact pixels/orientation; the additive light pass
   renders red/blue spectral output and disappears with zero reveal; both glass
@@ -235,3 +235,44 @@ Still required: assemble the retained draws into both complete scene graphs,
 light-theme materials/shadows, the canvas/frame-loop and React lifecycle, the
 full landing content, production build, local completion gates and public Pages
 deployment. This checkpoint does not complete the landing milestone.
+
+## Assembled dark scene checkpoint
+
+The dark graph now connects the actual rounded geometry, exterior/internal
+spectral light, two-interface environment glass, MSAA scene, bloom pyramid,
+display presentation and 2,200 animated dust instances. Its stable production
+backdrop is recorded in a native GPURenderBundle. Back, wall and caustic views
+retain the source's direct ordering and suppress the glass/dust/bloom layers
+where required. Both optional wireframe draws compile lazily and preserve their
+original line/triangle topology and premultiplied blending.
+
+BoundPipeline is the single owner for reflected native group construction,
+retained uniforms, rebinding and cleanup across fullscreen, particle and mesh
+passes. Allocations owns construction rollback for both the full graph and its
+postprocess graph. Indexed prism encoding belongs to geometry and serves glass
+and wireframes; the older glass-only encoder is removed. Strict hex parsing has
+one shared owner for scene uniforms and sRGB wall clearing.
+
+Four full-pipeline browser comparisons use the original createDarkPipeline and
+runtime implementation on the same native device. High/low quality and packed
+bloom (when enabled by the device) match every byte of backdrop, scene,
+presentation and final output. The input exercises nonblack wall color, pointer
+orbit, lamp target, partial beam aperture, cached time/reveal frames and all
+three wireframe combinations. RGB-only assertions reject blank frames, and zero
+display reveal is explicitly checked to be black.
+
+Portrait resizing updates target storage and reflected texture groups while
+retaining every compiled pipeline, uniform buffer and backdrop bundle. No shader
+pipeline is compiled during the Rust resize. A frame requesting cached rendering
+after resize still rebuilds the invalidated scene and matches upstream pixels.
+
+A late failure injected into dust pipeline creation releases every texture and
+buffer made by the full graph exactly once, including the already prepared
+postprocess resources. The shared runtime survives and retries successfully
+without rebaking its environment. All 41 app tests and 32 production browser
+tests pass; native and compiled scene invariants remain 26 each. Clippy reports
+only the existing #1784 false-positive warnings. No compiler patch was needed.
+
+The light-theme graph/materials, canvas/frame-loop/React lifecycle, complete
+landing content and Pages deployment still remain. These real GPU comparisons
+prove the dark scene, not a deployed or finished landing page.

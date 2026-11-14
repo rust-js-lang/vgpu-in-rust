@@ -10,16 +10,8 @@ import { ByTheme } from "./controls.js";
 import { LIGHT_INTERNAL_SEGMENTS } from "./light_mesh.js";
 import { prismPlanes } from "./prism_mesh.js";
 import { PRISM_BACK_Z, PRISM_FRONT_Z, PRISM_LIGHT_PLANE_Z, PRISM_TRIANGLE } from "./types.js";
-import {
-  $byteLen,
-  $debugParseError,
-  $forceLock,
-  $parseInt,
-  $strSlice,
-  $stripPrefix,
-  $unwrapOk,
-  $utf8Bytes,
-} from "@rust-js/std";
+import * as Color from "./color.js";
+import { $forceLock } from "@rust-js/std";
 
 export const ENVIRONMENT_SIZE = [1024, 512];
 export const ENVIRONMENT_LEVELS = 8;
@@ -41,28 +33,7 @@ export function schlickFresnelF0(ior) {
  * supplies its current camera, wall extent and lamp so all passes agree.
  */
 export function sceneUniforms(view, wallHalfExtent, light, controls, layout, beamWidthReveal) {
-  const color = $stripPrefix(controls.wallColor, "#") ?? controls.wallColor;
-  const wallColor =
-    $byteLen(color) === 6 &&
-    $utf8Bytes(color).every(
-      (byte) =>
-        (byte >= 48 && byte <= 57) || (byte >= 65 && byte <= 70) || (byte >= 97 && byte <= 102),
-    )
-      ? Array.from(
-          { length: 3 },
-          (_, index) =>
-            $unwrapOk(
-              $parseInt(
-                $strSlice(color, (index * 2) >>> 0, (((index * 2) >>> 0) + 2) >>> 0),
-                0,
-                255,
-                16,
-              ),
-              "hex channel",
-              (e) => $debugParseError(e, "ParseIntError"),
-            ) / 255,
-        )
-      : [0, 0, 0];
+  const wallColor = Color.hexColor(controls.wallColor) ?? [0, 0, 0];
   return {
     viewProjection: view.viewProjection,
     wallHalfExtent,

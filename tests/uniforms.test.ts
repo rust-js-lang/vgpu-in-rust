@@ -5,6 +5,7 @@ import {defaultPrismControls} from '../crates/prism/src/controls.js';
 import {sceneUniforms,glassUniforms,schlickFresnelF0} from '../crates/prism/src/uniforms.js';
 import {normalizeControls} from '../crates/prism/src/normalize_controls.js';
 import {buildLightMesh} from '../crates/web/src/light_mesh.js';
+import {darkWallClear,srgbToLinear} from '../crates/prism/src/color.js';
 import {RuntimeState} from '../crates/prism/src/runtime_state.js';
 import {cameraView} from '../crates/prism/src/camera.js';
 import {lightMeshLayout} from '../crates/prism/src/light_mesh.js';
@@ -14,7 +15,7 @@ const upstream=resolve(process.env.VGPU_UPSTREAM_DIR??'../vgpu');
 const source=resolve(upstream,'apps/docs/app/[lang]/(home)/components/prism-background');
 const output=resolve(import.meta.dir,'../node_modules/.cache/vgpu-reference-uniforms');
 mkdirSync(output,{recursive:true});
-await Bun.write(output+'/entry.ts','export * from '+JSON.stringify(source+'/runtime/uniforms.ts')+'; export * from '+JSON.stringify(source+'/runtime/state.ts')+'; export {normalizeControls} from '+JSON.stringify(source+'/runtime/normalize-controls.ts')+'; export {cameraView as referenceCameraView} from '+JSON.stringify(source+'/scene/camera.ts')+';');
+await Bun.write(output+'/entry.ts','export * from '+JSON.stringify(source+'/runtime/uniforms.ts')+'; export * from '+JSON.stringify(source+'/runtime/state.ts')+'; export {normalizeControls} from '+JSON.stringify(source+'/runtime/normalize-controls.ts')+'; export {cameraView as referenceCameraView} from '+JSON.stringify(source+'/scene/camera.ts')+'; export {darkWallClear,srgbToLinear} from '+JSON.stringify(source+'/pipelines/dark/passes/wall/clear.ts')+';');
 const built=await Bun.build({entrypoints:[output+'/entry.ts'],outdir:output+'/out',target:'bun',format:'esm',
   plugins:[{name:'pure-uniform-reference',setup(build){
     build.onResolve({filter:/^vgpu\/scene$/},()=>({path:'scene',namespace:'original-scene'}));
@@ -148,4 +149,10 @@ test('retained state follows upstream resizing, fit, orbit, optics and invalidat
       expect(RuntimeState.setControls(actual,presentation)).toBe(false);reference.setRuntimeControls(expected,presentation);compare();expect(actual.view.viewProjection).toBe(beforeMatrix);
     }
   }
+});
+
+test('dark wall clear preserves strict color parsing and the original sRGB transfer',()=>{
+  for(const color of ['#000000','#305070','aB80fF','#ffffff','#fff','ééé','#ffffff\n',' #305070','3050700'])for(const view of ['glass','wall','back','caustic'])
+    expect(darkWallClear(color,view)).toEqual(reference.darkWallClear(color,view));
+  for(const value of [-1,0,0.04045,0.040450001,0.5,1,2,NaN,Infinity])expect(srgbToLinear(value)).toBe(reference.srgbToLinear(value));
 });

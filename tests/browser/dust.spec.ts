@@ -31,9 +31,9 @@ test('Rust instanced dust matches upstream across lifetimes and reveal with one 
       const reports:Array<{time:number,reveal:number,mismatches:number,lit:number,checksum:number}>=[];
       for(const [time,reveal]of [[0,1],[3.2,1],[9.7,1],[1000000,1],[3.2,0],[3.2,0.25]]){
         const before=allocations;
-        value(f.DustDraw.write(draw,device,f.dustUniforms(view,extent,[128,128],1.25,time,reveal)));
+        value(f.ShaderBindings.writeValue(draw.values,device.queue,'params',f.dustUniforms(view,extent,[128,128],1.25,time,reveal)));
         const encoder=device.createCommandEncoder(),pass=encoder.beginRenderPass({colorAttachments:[f.RenderTarget.colorAttachment(output,false,[0,0,0,1])]});
-        f.DustDraw.encode(draw,pass);pass.end();device.queue.submit([encoder.finish()]);
+        f.encodeDust(draw,pass);pass.end();device.queue.submit([encoder.finish()]);
         actualAllocations+=allocations-before;
         original.set({params:{time,revealProgress:reveal}});
         ref.frame(gpu,(current:any)=>current.pass({target:expected,clear:[0,0,0,1]},(pass:any)=>pass.draw(original,{instances:2200})));
@@ -43,7 +43,7 @@ test('Rust instanced dust matches upstream across lifetimes and reveal with one 
       }
       return {reports,allocatedDuringAnimation:actualAllocations,sharedMatrix:initial.viewProjection===view.viewProjection,error:(await device.popErrorScope())?.message??null};
     }finally{
-      f.DustDraw.destroy(draw);for(const target of [color,light,output])f.RenderTarget.destroy(target);expected.destroy?.();original.destroy?.();buffer.destroy();gpu.dispose();device.destroy();
+      f.BoundPipeline.destroy(draw);for(const target of [color,light,output])f.RenderTarget.destroy(target);expected.destroy?.();original.destroy?.();buffer.destroy();gpu.dispose();device.destroy();
     }
   });
   expect(report.error).toBeNull();expect(report.sharedMatrix).toBe(true);expect(report.allocatedDuringAnimation).toBe(0);

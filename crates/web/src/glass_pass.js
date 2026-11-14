@@ -45,16 +45,4 @@ export async function glassPipeline(device, source, format, backFace, sampleCoun
     },
   });
 }
-
-/**
- * The graph supplies its load/resolve target so background, back interface,
- * internal light and front interface keep their original composition order.
- */
-export function encodeGlass(pass, pipeline, bindings, mesh) {
-  pass.setPipeline(pipeline);
-  pass.setBindGroup(0, bindings);
-  pass.setVertexBuffer(0, mesh.vertices);
-  pass.setIndexBuffer(mesh.indices, "uint16");
-  pass.drawIndexed(mesh.indexCount);
-}
 //# sourceMappingURL=glass_pass.js.map

@@ -1,6 +1,9 @@
 //! GPU ownership for the portable rounded prism mesh.
 use crate::buffers::create_vertex_buffer;
-use react::webapi::{GPUBuffer, GPUBufferDescriptor, GPUDevice, gpu_buffer_usage};
+use react::webapi::{
+    GPUBindGroup, GPUBuffer, GPUBufferDescriptor, GPUDevice, GPURenderPassEncoder,
+    GPURenderPipeline, gpu_buffer_usage,
+};
 use vgpu_prism::prism_mesh::{prism_mesh_data, prism_wireframe_indices};
 use vgpu_prism::types::{PRISM_BACK_Z, PRISM_FRONT_Z, PRISM_TRIANGLE};
 
@@ -41,4 +44,19 @@ impl PrismBuffers {
         self.vertices.destroy();
         self.indices.destroy();
     }
+}
+
+/// The graph supplies its load/resolve target so background, back interface,
+/// internal light and front interface keep their original composition order.
+pub fn encode_prism(
+    pass: &GPURenderPassEncoder,
+    pipeline: &GPURenderPipeline,
+    bindings: &GPUBindGroup,
+    mesh: &PrismBuffers,
+) {
+    pass.set_pipeline(pipeline);
+    pass.set_bind_group(0, Some(bindings), None);
+    pass.set_vertex_buffer(0, Some(mesh.vertices), None, None);
+    pass.set_index_buffer(mesh.indices, "uint16", None, None);
+    pass.draw_indexed(mesh.index_count as f64, None, None, None, None);
 }

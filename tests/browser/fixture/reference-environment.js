@@ -12,3 +12,7 @@ export {bloomBlurUniforms} from '@reference/app/[lang]/(home)/components/prism-b
 export {bloomSpread} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/dark/passes/bloom/config.ts';
 
 export {PRISM_TRIANGLE,PRISM_FRONT_Z,PRISM_LIGHT_PLANE_Z} from '@reference/app/[lang]/(home)/components/prism-background/types.ts';
+
+export {createPrismRuntime,prepareRuntimeEnvironment,destroyPrismRuntime} from '@reference/app/[lang]/(home)/components/prism-background/runtime/resources.ts';
+export {setRuntimeControls,setRuntimeLampAim,setRuntimeOrbit,setRuntimeFramingViewport,resizeRuntime} from '@reference/app/[lang]/(home)/components/prism-background/runtime/state.ts';
+export {createDarkPipeline} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/dark/index.ts';

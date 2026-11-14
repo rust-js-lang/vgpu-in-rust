@@ -166,3 +166,47 @@ impl ShaderBindings {
         }
     }
 }
+
+/// A compiled native pipeline with its reflected resources and retained uniforms.
+/// Pipeline creation belongs to each draw kind; binding ownership lives here.
+pub struct BoundPipeline {
+    pub pipeline: &'static GPURenderPipeline,
+    pub values: ShaderBindings,
+    pub group: &'static GPUBindGroup,
+}
+impl BoundPipeline {
+    pub fn prepare(
+        device: &GPUDevice,
+        source: &'static ShaderSource,
+        pipeline: &'static GPURenderPipeline,
+        inputs: &[UniformInput<'_>],
+        resources: &[NamedResource<'_>],
+        label: &str,
+    ) -> Result<Self, String> {
+        let values = prepare_shader_bindings(device, source, inputs, label)?;
+        let group = match values.bind(device, pipeline, resources, label) {
+            Ok(group) => group,
+            Err(error) => {
+                values.destroy();
+                return Err(error);
+            }
+        };
+        Ok(Self {
+            pipeline,
+            values,
+            group,
+        })
+    }
+    pub fn rebind(
+        &mut self,
+        device: &GPUDevice,
+        resources: &[NamedResource<'_>],
+        label: &str,
+    ) -> Result<(), String> {
+        self.group = self.values.bind(device, self.pipeline, resources, label)?;
+        Ok(())
+    }
+    pub fn destroy(&self) {
+        self.values.destroy();
+    }
+}

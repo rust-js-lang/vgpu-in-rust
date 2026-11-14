@@ -32,3 +32,21 @@ Start with a failing regression. File a generic reproducible issue using GitHub 
 ## Completion evidence
 
 A successful build alone is insufficient. Completion needs an accessible Pages URL, a public repository, the exact compiler gitlink, retained MIT notice, source-module coverage, passing meaningful parity/E2E checks, screenshots showing the live GPU scene and content on desktop/mobile, and a list of any accepted deviations. No static hero substitute. No test workflow: run tests locally.
+
+## Renderer ownership
+
+- crates/prism owns controls, normalized ranges, camera/framing state, optics,
+  geometry values and shader parameter values. Shared color parsing lives here.
+- crates/web/bindings owns reflected uniforms and BoundPipeline's retained
+  native group construction/rebinding. Each draw kind owns its pipeline layout
+  and fixed-function state; no second uniform-binding policy is introduced.
+- crates/web/resources owns rollback inventories for partial GPU construction.
+- crates/web/geometry owns indexed prism buffers and command encoding for glass
+  and edge topology. The runtime owns shared geometry and environments.
+- crates/web/dark_graph owns pass ordering, render bundles, cached presentation,
+  resize invalidation and graph cleanup. Postprocess owns pyramid sizing,
+  filtering and presentation. Graph resize retains pipelines/uniform buffers.
+
+Tests compare the full original dark pipeline, not only isolated pass helpers.
+Reference gateways export actual upstream functions exclusively and stay inside
+browser test fixtures; production Rust has no upstream app TypeScript dependency.

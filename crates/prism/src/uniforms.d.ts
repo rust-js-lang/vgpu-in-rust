@@ -60,3 +60,8 @@ export interface GlassUniforms {
 }
 
 export function glassUniforms(view: CameraView, controls: PrismControls, mode: PrismTheme, debugEnvironmentEnabled: boolean): GlassUniforms;
+
+/** Camera block shared by the optional indexed edge draws in either theme. */
+export interface WireframeUniforms {
+    viewProjection: number[];
+}

@@ -142,4 +142,46 @@ export const ShaderBindings = {
     }
   },
 };
+
+export const BoundPipeline = {
+  prepare(device, source, pipeline, inputs, resources, label) {
+    const result = prepareShaderBindings(device, source, inputs, label);
+    if (result.TAG === "Err") {
+      return result;
+    }
+    const values = result._0;
+    const bind = ShaderBindings.bind(values, device, pipeline, resources, label);
+    if (bind.TAG === "Ok") {
+      const group = bind._0;
+      return {
+        TAG: "Ok",
+        _0: {
+          pipeline,
+          values,
+          group,
+        },
+      };
+    }
+    const error = bind._0;
+    ShaderBindings.destroy(values);
+    return { TAG: "Err", _0: error };
+  },
+  rebind(boundPipeline, device, resources, label) {
+    const result = ShaderBindings.bind(
+      boundPipeline.values,
+      device,
+      boundPipeline.pipeline,
+      resources,
+      label,
+    );
+    if (result.TAG === "Err") {
+      return result;
+    }
+    boundPipeline.group = result._0;
+    return { TAG: "Ok" };
+  },
+  destroy(boundPipeline) {
+    ShaderBindings.destroy(boundPipeline.values);
+  },
+};
 //# sourceMappingURL=bindings.js.map

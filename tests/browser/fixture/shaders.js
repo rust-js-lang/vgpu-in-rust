@@ -20,8 +20,8 @@ Object.assign(window.shaderFixture,{sceneUniforms,glassUniforms,defaultPrismCont
 import {createUniformBuffer,writeUniformBuffer,createVertexBuffer} from '../../../crates/web/src/buffers.js';
 Object.assign(window.shaderFixture,{createUniformBuffer,writeUniformBuffer,createVertexBuffer});
 
-import {glassPipeline,encodeGlass} from '../../../crates/web/src/glass_pass.js';
-Object.assign(window.shaderFixture,{glassPipeline,encodeGlass});
+import {glassPipeline} from '../../../crates/web/src/glass_pass.js';
+Object.assign(window.shaderFixture,{glassPipeline,encodePrism});
 
 import {createEnvironmentTexture,createEnvironmentSampler,EnvironmentTexture} from '../../../crates/web/src/environment.js';
 import {createRenderTarget,RenderTarget} from '../../../crates/web/src/targets.js';
@@ -30,7 +30,7 @@ Object.assign(window.shaderFixture,{createEnvironmentTexture,createEnvironmentSa
   createRenderTarget,RenderTarget,prepareShaderBindings,ShaderBindings,
   referenceEnvironment:()=>import('./reference-environment.js')});
 
-import {createPrismGeometry,PrismBuffers} from '../../../crates/web/src/geometry.js';
+import {createPrismGeometry,PrismBuffers,encodePrism} from '../../../crates/web/src/geometry.js';
 import {cameraView} from '../../../crates/prism/src/camera.js';
 Object.assign(window.shaderFixture,{createPrismGeometry,PrismBuffers,cameraView});
 
@@ -41,8 +41,14 @@ import {createDarkPostprocess,DarkPostprocess} from '../../../crates/web/src/pos
 Object.assign(window.shaderFixture,{createDarkPostprocess,DarkPostprocess});
 
 import {dustUniforms} from '../../../crates/prism/src/dust.js';
-import {createDustDraw,DustDraw} from '../../../crates/web/src/dust.js';
-Object.assign(window.shaderFixture,{dustUniforms,createDustDraw,DustDraw});
+import {createDustDraw,encodeDust} from '../../../crates/web/src/dust.js';
+Object.assign(window.shaderFixture,{dustUniforms,createDustDraw,encodeDust});
 
 import {createPrismRuntime,PrismRuntime} from '../../../crates/web/src/runtime.js';
 Object.assign(window.shaderFixture,{createPrismRuntime,PrismRuntime});
+
+import {BoundPipeline} from '../../../crates/web/src/bindings.js';
+Object.assign(window.shaderFixture,{BoundPipeline});
+
+import {createDarkGraph,DarkGraph} from '../../../crates/web/src/dark_graph.js';
+Object.assign(window.shaderFixture,{createDarkGraph,DarkGraph});

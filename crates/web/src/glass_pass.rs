@@ -1,11 +1,9 @@
 //! Both rasterized glass interfaces from pipelines/dark/create-graph.ts.
-use crate::geometry::PrismBuffers;
 use crate::shader::{ShaderSource, shader_module};
 use react::webapi::{
-    GPUBindGroup, GPUBlendComponent, GPUBlendState, GPUColorTargetState, GPUDevice,
-    GPUFragmentState, GPUMultisampleState, GPUPrimitiveState, GPURenderPassEncoder,
-    GPURenderPipeline, GPURenderPipelineDescriptor, GPUVertexAttribute, GPUVertexBufferLayout,
-    GPUVertexState,
+    GPUBlendComponent, GPUBlendState, GPUColorTargetState, GPUDevice, GPUFragmentState,
+    GPUMultisampleState, GPUPrimitiveState, GPURenderPipeline, GPURenderPipelineDescriptor,
+    GPUVertexAttribute, GPUVertexBufferLayout, GPUVertexState,
 };
 use vgpu_prism::prism_mesh::PRISM_VERTEX_STRIDE;
 
@@ -73,19 +71,4 @@ pub async fn glass_pipeline(
             }),
         })
         .await
-}
-
-/// The graph supplies its load/resolve target so background, back interface,
-/// internal light and front interface keep their original composition order.
-pub fn encode_glass(
-    pass: &GPURenderPassEncoder,
-    pipeline: &GPURenderPipeline,
-    bindings: &GPUBindGroup,
-    mesh: &PrismBuffers,
-) {
-    pass.set_pipeline(pipeline);
-    pass.set_bind_group(0, Some(bindings), None);
-    pass.set_vertex_buffer(0, Some(mesh.vertices), None, None);
-    pass.set_index_buffer(mesh.indices, "uint16", None, None);
-    pass.draw_indexed(mesh.index_count as f64, None, None, None, None);
 }

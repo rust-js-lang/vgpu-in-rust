@@ -42,3 +42,19 @@ export const ShaderBindings: {
  * cannot leak the buffers already allocated for an earlier block.
  */
 export function prepareShaderBindings(device: GPUDevice, source: ShaderSource, inputs: UniformInput[], label: string): any;
+
+/**
+ * A compiled native pipeline with its reflected resources and retained uniforms.
+ * Pipeline creation belongs to each draw kind; binding ownership lives here.
+ */
+export interface BoundPipeline {
+    pipeline: GPURenderPipeline;
+    values: ShaderBindings;
+    group: GPUBindGroup;
+}
+
+export const BoundPipeline: {
+    prepare(device: GPUDevice, source: ShaderSource, pipeline: GPURenderPipeline, inputs: UniformInput[], resources: NamedResource[], label: string): any;
+    rebind(boundPipeline: BoundPipeline, device: GPUDevice, resources: NamedResource[], label: string): any;
+    destroy(boundPipeline: BoundPipeline): void;
+};

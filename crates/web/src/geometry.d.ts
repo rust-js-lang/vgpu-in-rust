@@ -12,3 +12,9 @@ export const PrismBuffers: {
 };
 
 export function createPrismGeometry(device: GPUDevice, label: string, wireframe: boolean): PrismBuffers;
+
+/**
+ * The graph supplies its load/resolve target so background, back interface,
+ * internal light and front interface keep their original composition order.
+ */
+export function encodePrism(pass: GPURenderPassEncoder, pipeline: GPURenderPipeline, bindings: GPUBindGroup, mesh: PrismBuffers): void;

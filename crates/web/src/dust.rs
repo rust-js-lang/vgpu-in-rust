@@ -1,21 +1,16 @@
 //! Native instanced dust rendering. Its authored deterministic simulation is WGSL.
-use crate::bindings::{NamedResource, ShaderBindings, UniformInput, prepare_shader_bindings};
+use crate::bindings::{BoundPipeline, NamedResource, UniformInput};
 use crate::shader::{ShaderSource, shader_module};
 use react::webapi::{
-    GPUBindGroup, GPUBlendComponent, GPUBlendState, GPUColorTargetState, GPUDevice,
-    GPUFragmentState, GPUPrimitiveState, GPURenderPassEncoder, GPURenderPipeline,
-    GPURenderPipelineDescriptor, GPUSampler, GPUTextureView, GPUVertexState,
+    GPUBlendComponent, GPUBlendState, GPUColorTargetState, GPUDevice, GPUFragmentState,
+    GPUPrimitiveState, GPURenderPassEncoder, GPURenderPipelineDescriptor, GPUSampler,
+    GPUTextureView, GPUVertexState,
 };
 use vgpu_prism::dust::{DUST_PARTICLE_COUNT, DustUniforms};
 
 unsafe extern "Rust" {
     #[link_name = "../../../assets/prism-background/pipelines/dark/passes/particles/dust.wgsl#default"]
     safe static DUST: &'static ShaderSource;
-}
-pub struct DustDraw {
-    pub pipeline: &'static GPURenderPipeline,
-    pub values: ShaderBindings,
-    pub group: &'static GPUBindGroup,
 }
 pub async fn create_dust_draw(
     device: &GPUDevice,
@@ -25,7 +20,7 @@ pub async fn create_dust_draw(
     sampler: &GPUSampler,
     format: &str,
     label: &str,
-) -> Result<DustDraw, String> {
+) -> Result<BoundPipeline, String> {
     let module = shader_module(device, DUST, label);
     let additive = GPUBlendComponent {
         operation: Some("add"),
@@ -63,11 +58,11 @@ pub async fn create_dust_draw(
             }),
         })
         .await;
-    let values =
-        prepare_shader_bindings(device, DUST, &[UniformInput::new("params", params)], label)?;
-    let group = match values.bind(
+    BoundPipeline::prepare(
         device,
+        DUST,
         pipeline,
+        &[UniformInput::new("params", params)],
         &[
             NamedResource {
                 name: "colorTexture",
@@ -83,30 +78,11 @@ pub async fn create_dust_draw(
             },
         ],
         label,
-    ) {
-        Ok(group) => group,
-        Err(error) => {
-            values.destroy();
-            return Err(error);
-        }
-    };
-    Ok(DustDraw {
-        pipeline,
-        values,
-        group,
-    })
+    )
 }
-impl DustDraw {
-    pub fn write(&self, device: &GPUDevice, params: DustUniforms) -> Result<(), String> {
-        self.values.write_value(device.queue(), "params", params)
-    }
-    /// Composited in the same output pass after the cached display copy.
-    pub fn encode(&self, pass: &GPURenderPassEncoder) {
-        pass.set_pipeline(self.pipeline);
-        pass.set_bind_group(0, Some(self.group), None);
-        pass.draw(6, Some(DUST_PARTICLE_COUNT as f64), None, None);
-    }
-    pub fn destroy(&self) {
-        self.values.destroy();
-    }
+/// Composited in the same output pass after the cached display copy.
+pub fn encode_dust(draw: &BoundPipeline, pass: &GPURenderPassEncoder) {
+    pass.set_pipeline(draw.pipeline);
+    pass.set_bind_group(0, Some(draw.group), None);
+    pass.draw(6, Some(DUST_PARTICLE_COUNT as f64), None, None);
 }

@@ -55,18 +55,7 @@ pub fn scene_uniforms(
     layout: &LightMeshLayout,
     beam_width_reveal: f64,
 ) -> SceneUniforms {
-    let color = controls
-        .wall_color
-        .strip_prefix('#')
-        .unwrap_or(&controls.wall_color);
-    let wall_color = if color.len() == 6 && color.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        std::array::from_fn(|index| {
-            u8::from_str_radix(&color[index * 2..index * 2 + 2], 16).expect("hex channel") as f64
-                / 255.0
-        })
-    } else {
-        [0.0; 3]
-    };
+    let wall_color = crate::color::hex_color(&controls.wall_color).unwrap_or([0.0; 3]);
     SceneUniforms {
         view_projection: Rc::clone(&view.view_projection),
         wall_half_extent,
@@ -135,4 +124,9 @@ pub fn glass_uniforms(
         fresnel_f0: schlick_fresnel_f0(transmission.ior),
         prism_planes: &PRISM_PLANES,
     }
+}
+
+/// Camera block shared by the optional indexed edge draws in either theme.
+pub struct WireframeUniforms {
+    pub view_projection: Rc<[f32; 16]>,
 }
