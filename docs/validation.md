@@ -3,16 +3,20 @@
 Implementation is in progress. The complete landing page is not deployed.
 The compiler now uses published rust-js `0fb07aed694681295a1f2132ee78fbf647f764ed`,
 fetched on 2026-11-14. Its WebAPI promise and async declaration fixes and regressions are used unchanged.
-One reproducible downstream patch retains three outstanding fixes.
+One reproducible downstream patch retains four outstanding fixes.
 
 ## Passing application checks
 
-- Seventeen native Rust scene tests pass; the same seventeen also pass after
+- Twenty native Rust scene tests pass; the same twenty also pass after
   compilation to JavaScript. The new camera checks cover orbit/centering, matrix identity, wall containment
   and environment rotation.
-- Eighteen app tests pass with 22,461 assertions: optics, interaction, framing,
+- Twenty-three app tests pass with over 149,000 assertions: optics, interaction, framing,
   exact rounded mesh vertices/topology over fifteen shape/depth combinations,
   exact camera Float32 storage/matrices and orbital basis over 90 configurations,
+  every spectral metadata record across high/low mesh layouts, exact Float32 light
+  vertices across thirteen optical configurations, clipping, integrated flux and
+  retained GPU upload/scratch identity, exact native metadata RangeErrors for
+  invalid fractional/nonfinite/negative/out-of-range indices,
   exact React markup/context behavior, retained asset identity, and complete
   compiler patch reproducibility. The audit rejects unrecorded compiler edits.
 - Thirteen production-built Chromium checks pass: ten compare Rust and upstream
@@ -22,7 +26,7 @@ One reproducible downstream patch retains three outstanding fixes.
   an invalid shader reports errors, and the Rust fullscreen pass copies exact
   RGBA pixels without reversing the image.
 - Previously ported scene and UI modules regenerate without JavaScript changes.
-  The new camera preserves shared view-projection identity and matches original
+  The camera preserves shared view-projection identity and matches original
   Float32 matrices exactly. A compensated norm removes the measured cancellation
   mismatch from chained two-axis hypot calls. App compilation and rust-js-aware Clippy pass.
 
@@ -32,11 +36,21 @@ compilation diagnostics, pipeline creation and command encoding. The existing
 WGSL asset compiler resolves imports/reflection at build time. Upstream app
 TypeScript is imported only by isolated reference tests.
 
+The light mesh core reuses a packed-number scratch buffer. Its web boundary owns
+the retained Float32Array and performs the original single bulk conversion;
+wrong-length targets throw the original native RangeError and exact message.
+Both Rust runtimes test topology ranges, finite vertices, scratch overwrite and
+wavelength-subdivision flux invariance.
+
 These checks prove components and GPU building blocks. The prism scene passes,
 complete landing root and full-page visual comparison remain unfinished.
 
 ## Current compiler patch
 
+- #1773: native RangeError constructor uses the existing Error binding convention.
+  Constructor/options/declaration/throwing checks pass, and replacing it with base
+  Error is caught on native class identity. All sixteen constructor tests and the
+  three builtins coverage checks pass (723/723 covered members).
 - #1481: Cow AsRef/Borrow uses the existing dereference owner. Its corpus case
   matches native Rust on the updated compiler, including strings, slices,
   arrays, paths and both variants. Two dictionary mutations were previously caught.
@@ -47,7 +61,7 @@ complete landing root and full-page visual comparison remain unfinished.
   reader mutation was caught.
 
 
-The current focused run passes five tests: upstream's nullable-promise
+The earlier focused run passed five tests: upstream's nullable-promise
 and async declaration regressions plus three retained cases in two downstream files.
 A clean application of the combined patch matches every private compiler edit.
 

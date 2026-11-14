@@ -3,5 +3,6 @@ pub mod fullscreen;
 pub mod hero_tab_state;
 pub mod hero_tabs;
 pub mod inline_code;
+pub mod light_mesh;
 pub mod shader;
 pub mod wordmark;

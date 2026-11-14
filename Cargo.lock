@@ -31,4 +31,5 @@ version = "0.1.0"
 dependencies = [
  "rust-js-builtins",
  "rust-js-react",
+ "vgpu-prism",
 ]

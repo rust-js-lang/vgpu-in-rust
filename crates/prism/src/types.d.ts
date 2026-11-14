@@ -124,3 +124,17 @@ export function collimatedLightBetween(center: Vec2, target: Vec2, beamWidth: nu
  * can therefore move independently.
  */
 export function lampForIncidence(incidenceDegrees: number, beamWidth: number, entryPosition: number): CollimatedLight;
+
+/** Cauchy dispersion coefficients. Stylized widens real glass's colored edge. */
+export interface DispersionPreset {
+    base: number;
+    strength: number;
+}
+
+export const STYLIZED_DISPERSION: DispersionPreset;
+
+export const CROWN_DISPERSION: DispersionPreset;
+
+export const FLINT_DISPERSION: DispersionPreset;
+
+export const DEFAULT_LIGHT_EDGE_FALLOFF: number;

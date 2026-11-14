@@ -193,3 +193,24 @@ mod tests {
         collimated_light_between([0.0, 0.0], [0.0, 0.0], PRISM_DEFAULT_BEAM_WIDTH);
     }
 }
+
+/// Cauchy dispersion coefficients. Stylized widens real glass's colored edge.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DispersionPreset {
+    pub base: f64,
+    pub strength: f64,
+}
+
+pub const STYLIZED_DISPERSION: DispersionPreset = DispersionPreset {
+    base: 1.245,
+    strength: 0.06,
+};
+pub const CROWN_DISPERSION: DispersionPreset = DispersionPreset {
+    base: 1.5046,
+    strength: 0.0042,
+};
+pub const FLINT_DISPERSION: DispersionPreset = DispersionPreset {
+    base: 1.664,
+    strength: 0.0105,
+};
+pub const DEFAULT_LIGHT_EDGE_FALLOFF: f64 = 16.0;

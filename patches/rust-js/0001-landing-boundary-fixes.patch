@@ -14,6 +14,78 @@ index 27c09e6..1f91d86 100644
 +browser promises and async declarations are now upstream-owned (#1768, #1769),
 +without downstream overrides. Historical CI totals above are not recounted
 +in this downstream checkout.
+diff --git a/builtins/coverage.ts b/builtins/coverage.ts
+index 9f1aa96..3dc1d4d 100644
+--- a/builtins/coverage.ts
++++ b/builtins/coverage.ts
+@@ -15,7 +15,7 @@ import { open } from "@rust-js/typescript";
+ 
+ /** The built-ins measured: classes, namespaces and objects of functions. */
+ export const SCOPE = [
+-  "Date", "RegExp", "Error", "AggregateError", "Promise", "Symbol",
++  "Date", "RegExp", "Error", "RangeError", "AggregateError", "Promise", "Symbol",
+   "ArrayBuffer", "SharedArrayBuffer", "DataView",
+   "Int8Array", "Uint8Array", "Uint8ClampedArray", "Int16Array", "Uint16Array", "Int32Array", "Uint32Array",
+   "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array",
+diff --git a/builtins/coverage.txt b/builtins/coverage.txt
+index e7af13c..b69c5a5 100644
+--- a/builtins/coverage.txt
++++ b/builtins/coverage.txt
+@@ -1,5 +1,5 @@
+ # The js crate against TypeScript's ES2024 library, where Rust has no type of its own: bun test test/builtins-coverage.test.ts
+-# members: 718 of 718 (100.0%)
++# members: 723 of 723 (100.0%)
+ AggregateError.cause
+ AggregateError.constructor
+ AggregateError.errors
+@@ -486,6 +486,11 @@ Promise.static:withResolvers
+ Promise.then
+ Proxy.constructor
+ Proxy.static:revocable
++RangeError.cause
++RangeError.constructor
++RangeError.message
++RangeError.name
++RangeError.stack
+ Reflect.static:apply
+ Reflect.static:construct
+ Reflect.static:defineProperty
+diff --git a/builtins/src/lib.rs b/builtins/src/lib.rs
+index d752b8a..c7289eb 100644
+--- a/builtins/src/lib.rs
++++ b/builtins/src/lib.rs
+@@ -2799,6 +2799,31 @@ pub struct ErrorOptions<'a> {
+     pub cause: Option<&'a dyn IntoUnknown>,
+ }
+ 
++/// JS's native RangeError, an Error with its own constructor and prototype.
++#[cfg_attr(rust_js, rust_js::types = "RangeError")]
++pub struct RangeError(PhantomData<JsObject>);
++
++impl core::ops::Deref for RangeError {
++    type Target = Error;
++
++    fn deref(&self) -> &Error {
++        // Never runs: rust-js compiles this Deref to the object itself.
++        unsafe { &*(self as *const Self as *const Error) }
++    }
++}
++
++pub mod range_error {
++    use super::*;
++
++    /// JS's new RangeError(message, options). None omits the optional argument,
++    /// preserving the difference between no message and an explicit empty one.
++    #[cfg_attr(rust_js, rust_js::link_name = "new RangeError")]
++    #[cfg_attr(rust_js, rust_js::called_constructs)]
++    pub fn new(message: Option<&str>, options: Option<&ErrorOptions<'_>>) -> &'static RangeError {
++        unreachable!()
++    }
++}
++
+ /// An [`AggregateError`](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/AggregateError):
+ /// several errors as one, what `Promise.any` rejects with when every
+ /// promise rejects. It's an `Error`, a `&Error` by `Deref`.
 diff --git a/docs/architecture.md b/docs/architecture.md
 index 9380df2..02e1ff3 100644
 --- a/docs/architecture.md
@@ -58,6 +130,26 @@ index afdb897..5056c9d 100644
 +real React 18 Rust metadata and verifies the canonical alias plus strict
 +mutable-payload callers. This preserves the Rust handle's API across
 +supported React releases without adding another Rust ref type.
+diff --git a/docs/decisions/0283-js-crate-covers-typescripts-es-library.md b/docs/decisions/0283-js-crate-covers-typescripts-es-library.md
+index d8391ef..9a05f28 100644
+--- a/docs/decisions/0283-js-crate-covers-typescripts-es-library.md
++++ b/docs/decisions/0283-js-crate-covers-typescripts-es-library.md
+@@ -364,3 +364,15 @@ Node; the compiler's two forms by the mutations
+ `keyed-method-a-member`, `keyed-method-quoted`, `keyed-method-key-unchecked` and
+ `keyed-function-unrefused`. `coverage.txt` is unchanged: `prototype` and
+ the iterator protocol's interfaces aren't measured.
++
++
++### Native RangeError constructor (#1773)
++
++RangeError follows the existing Error boundary: an opaque native class,
++Deref to Error, and range_error::new(message, options) using called_constructs.
++The host constructor preserves prototype identity, absent versus empty message,
++and cause identity. Changing Error.name would fail instanceof RangeError and
++is rejected. No lowering rule or second error representation is introduced.
++This is ADR 0262's no-difference case. The constructor regression checks native
++class identity and declarations; replacing its constructor with Error is caught.
++The builtins coverage scope includes RangeError and all five inherited/own members.
 diff --git a/docs/decisions/0318-lazy-cells.md b/docs/decisions/0318-lazy-cells.md
 index eebd0f8..defc7ba 100644
 --- a/docs/decisions/0318-lazy-cells.md
@@ -125,6 +217,24 @@ index da392f3..10d9e8a 100644
 +reads that payload for either variant; borrowing the Cow as itself gives
 +the Cow. Its AsRef does not turn borrowed data into owned data. See
 +[ADR 0319](../../decisions/0319-cows.md) and #1481.
+diff --git a/docs/guide/interop/exceptions.md b/docs/guide/interop/exceptions.md
+index 1461467..b24fcda 100644
+--- a/docs/guide/interop/exceptions.md
++++ b/docs/guide/interop/exceptions.md
+@@ -1137,6 +1137,13 @@ export function lazyInitializer(payload) {
+   and its payload's `downcast_ref::<&JsError>()` is the value thrown, a
+   string's or a promise's too, as [above](#catch-an-unwind-catch_unwind).
+ 
++Native JS error classes retain their prototype identity. Use
++`js::range_error::new(message, options)` for a `RangeError`, with the same
++optional message and `ErrorOptions` as `js::error::new`. It dereferences to
++`Error` for inherited accessors and can be thrown through `js::throw`.
++This uses the host's constructor directly; no Rust/JS observable difference
++is introduced (ADR 0262, no difference).
++
+ ## Exiting the process
+ 
+ `std::process::exit(code)` is Node's `process.exit(code)`:
 diff --git a/docs/guide/interop/types.md b/docs/guide/interop/types.md
 index 1cef2a0..4619e15 100644
 --- a/docs/guide/interop/types.md
@@ -774,3 +884,40 @@ index 515f282..f31f794 100644
    ["a BuildHasher's method in generic code", "use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};\nfn built<B: BuildHasher>(b: &B) -> B::Hasher { b.build_hasher() }\npub fn f() -> DefaultHasher { built(&BuildHasherDefault::<DefaultHasher>::default()) }", "calling `std::hash::BuildHasher::build_hasher` (#1482)"],
    // A `BufReader`'s `{:?}` shows its buffer's fill, which is refused for now
    // (#1418).
+diff --git a/test/js-constructors.test.ts b/test/js-constructors.test.ts
+index 2583fc7..5119255 100644
+--- a/test/js-constructors.test.ts
++++ b/test/js-constructors.test.ts
+@@ -1014,3 +1014,32 @@ pub fn views(chunk: &'static Uint8Array) -> Vec<&'static ArrayBufferView> {
+   expect(view).toBeInstanceOf(DataView);
+   expect(view.byteLength).toBe(4);
+ });
++
++
++test("a RangeError keeps its native constructor, options and thrown identity", async () => {
++  const {dts,lib}=await compiled("range-error-constructor", `pub fn make(message: Option<&str>) -> &'static js::RangeError {
++    js::range_error::new(message, None)
++}
++pub fn caused(cause: &js::Unknown) -> &'static js::RangeError {
++    js::range_error::new(Some("outside"), Some(&js::ErrorOptions { cause: Some(cause) }))
++}
++pub fn fail(message: &str) -> ! {
++    js::throw(js::range_error::new(Some(message), None).as_unknown())
++}
++`);
++  expect(dts).toContain("): RangeError;");
++  const missing=lib.make(undefined);
++  expect(missing).toBeInstanceOf(RangeError);
++  expect(Object.hasOwn(missing,"message")).toBe(false);
++  const explicit=lib.make("");
++  expect(Object.hasOwn(explicit,"message")).toBe(true);
++  expect(explicit.message).toBe("");
++  const cause={id:42};
++  const error=lib.caused(cause);
++  expect(error).toBeInstanceOf(Error);
++  expect(error).toBeInstanceOf(RangeError);
++  expect(error.name).toBe("RangeError");
++  expect(error.cause).toBe(cause);
++  expect(()=>lib.fail("bad length")).toThrow(RangeError);
++  expect(()=>lib.fail("bad length")).toThrow("bad length");
++});

@@ -153,4 +153,18 @@ function rotate(point, angle) {
   const sine = Math.sin(angle);
   return [point[0] * cosine - point[1] * sine, point[0] * sine + point[1] * cosine];
 }
+
+export const STYLIZED_DISPERSION = {
+  base: 1.245,
+  strength: 0.06,
+};
+export const CROWN_DISPERSION = {
+  base: 1.5046,
+  strength: 0.0042,
+};
+export const FLINT_DISPERSION = {
+  base: 1.664,
+  strength: 0.0105,
+};
+export const DEFAULT_LIGHT_EDGE_FALLOFF = 16;
 //# sourceMappingURL=types.js.map

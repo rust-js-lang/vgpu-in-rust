@@ -3,10 +3,11 @@
 The gitlink is the authority for the compiler revision. Current published pin:
 `0fb07aed694681295a1f2132ee78fbf647f764ed` (fetched 2026-11-14).
 
-The single `0001-landing-boundary-fixes.patch` retains three outstanding fixes:
+The single `0001-landing-boundary-fixes.patch` retains four outstanding fixes:
 
 | Upstream issue | Change |
 | --- | --- |
+| [#1773](https://github.com/rust-js-lang/rust-js/issues/1773) | Native RangeError constructor preserves prototype identity, optional message/cause, and thrown values. |
 | [#1481](https://github.com/rust-js-lang/rust-js/issues/1481) | Cow AsRef/Borrow dictionaries consume the existing Cow dereference owner. |
 | [#1752](https://github.com/rust-js-lang/rust-js/issues/1752) | Lazy storage declarations use the representation owner's Pending/Ready schema. |
 | [#1763](https://github.com/rust-js-lang/rust-js/issues/1763) | React hook handles retain their types, with the correct React 18/19 mutable-ref alias. |
