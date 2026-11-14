@@ -4,12 +4,14 @@ Implementation is in progress. No public landing page is deployed yet. The final
 
 ## Passing app checks
 
-The Rust scene crate implements pointer easing, responsive projection framing, rounded/beveled prism geometry, wireframe extraction, optical planes, intersection, Snell refraction, total internal reflection, Fresnel transmission and CIE/D65 spectral mapping. React leaves include the wordmark, inline literals and memoized hero-tab context.
+The Rust scene crate implements pointer easing, responsive projection framing, rounded/beveled prism geometry, wireframe extraction, optical planes, intersection, Snell refraction, total internal reflection, Fresnel transmission and CIE/D65 spectral mapping. React leaves include the wordmark, inline literals and memoized hero-tab context and the complete setup-tab interaction.
 
 - Fourteen native Rust scene tests pass; the same fourteen pass after rust-js compilation under Bun.
-- Fourteen app comparison/reproducibility tests pass with 19,574 assertions: nine optical/interaction comparisons, exact Float32 mesh vertices and topology across fifteen shape/depth combinations, three component/context comparisons, and clean application of all eight compiler patches.
+- Fifteen app comparison/reproducibility tests pass with 19,575 assertions: nine optical/interaction comparisons, exact Float32 mesh vertices and topology across fifteen shape/depth combinations, four component/context comparisons, and clean application of all eight compiler patches.
 - The patch audit also rejects compiler edits omitted from the tracked stack. Generated browser modules match their Rust source, and the new web code passes rust-js-aware Clippy with warnings denied.
 - The 44 retained shader modules match upstream byte for byte. They are not yet connected to a renderer.
+
+Ten production-built Chromium checks pass against the Rust and original setup tabs (five each): all snippets/copy/reset, rapid-switch timer restart and stable layout, rejected and unavailable clipboard access, unmount cancellation, and mobile reduced motion. The original markup including its icon matches exactly. Reference TS is isolated to test fixtures and never shipped as application code. Vite packages these fixtures only; a runnable full landing app is still pending.
 
 These checks do not prove a rendered GPU scene or complete landing-page fidelity.
 

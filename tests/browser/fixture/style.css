@@ -1,0 +1,6 @@
+@import "tailwindcss";
+@source "../../../crates/web/src";
+@source "./reference.jsx";
+@import "./hero-theme.css";
+body { margin: 0; padding: 32px; font-family: sans-serif; }
+section { max-width: 416px; margin: auto; padding: 24px; }

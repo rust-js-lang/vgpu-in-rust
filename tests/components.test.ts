@@ -5,6 +5,7 @@ import {createElement} from "react";
 import {renderToStaticMarkup} from "react-dom/server";
 import {InlineCode,stripBackticks} from "../crates/web/src/inline_code.jsx";
 import {HeroTabProvider,useHeroTab} from "../crates/web/src/hero_tab_state.jsx";
+import {HeroTabs} from "../crates/web/src/hero_tabs.jsx";
 import {VgpuWordmarkGlyphs} from "../crates/web/src/wordmark.jsx";
 
 // Package only the reference leaves for test execution. No reference TS is
@@ -18,11 +19,16 @@ const built=await Bun.build({
     resolve(upstream,"apps/docs/app/[lang]/(home)/components/inline-code.tsx"),
     resolve(upstream,"apps/docs/components/vgpu-wordmark.tsx"),
     resolve(upstream,"apps/docs/components/hero/hero-tab-state.tsx"),
+    resolve(upstream,"apps/docs/app/[lang]/(home)/components/hero-tabs.tsx"),
   ],
   outdir:output,
-  external:["react","react/jsx-runtime"],
+  external:["react","react/jsx-runtime","lucide-react"],
+  plugins:[{name:"reference-hero-context",setup(build){
+    build.onResolve({filter:/^@\/components\/hero\/hero-tab-state$/},()=>({path:resolve(upstream,"apps/docs/components/hero/hero-tab-state.tsx")}));
+  }}],
   target:"browser",
   format:"esm",
+  splitting:true,
 });
 if(!built.success)throw new AggregateError(built.logs,"Cannot build upstream reference leaves");
 const inlineOutput=built.outputs.find(asset=>asset.path.endsWith("/inline-code.js"));
@@ -65,4 +71,13 @@ test("Rust hero context preserves the initial tab, setter and missing-provider e
     expect(thrown).toBeInstanceOf(Error);
     expect((thrown as Error).message).toBe("useHeroTab must be used inside HeroTabProvider.");
   }
+});
+
+const tabsOutput=built.outputs.find(asset=>asset.path.endsWith("/hero-tabs.js"));
+if(!tabsOutput)throw new Error("Reference hero tabs missing from build");
+const referenceTabs=await import(tabsOutput.path);
+test("Rust setup tabs preserve the exact initial upstream markup and icon",()=>{
+  const port=renderToStaticMarkup(createElement(HeroTabProvider,{children:createElement(HeroTabs)}));
+  const original=renderToStaticMarkup(createElement(tabState.HeroTabProvider,{children:createElement(referenceTabs.HeroTabs)}));
+  expect(port).toBe(original);
 });

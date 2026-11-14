@@ -11,14 +11,20 @@
     "test:parity": "bun test tests/parity.test.ts",
     "patch:compiler": "bun scripts/patch-rust-js.ts",
     "test:compiled": "bun rust-js/tooling/cli.js test --package vgpu-prism",
-    "test": "bun test ./tests/*.test.ts"
+    "test": "bun test ./tests/*.test.ts",
+    "test:browser": "bunx --bun playwright test"
   },
   "dependencies": {
     "@rust-js/std": "file:rust-js/std",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "lucide-react": "0.555.0"
   },
   "devDependencies": {
-    "@types/bun": "1.4.4"
+    "@types/bun": "1.4.4",
+    "@playwright/test": "1.65.0",
+    "vite": "8.3.8",
+    "@tailwindcss/vite": "4.3.3",
+    "tailwindcss": "4.3.3"
   }
 }

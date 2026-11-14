@@ -29,5 +29,6 @@ version = "0.1.0"
 name = "vgpu-web"
 version = "0.1.0"
 dependencies = [
+ "rust-js-builtins",
  "rust-js-react",
 ]
