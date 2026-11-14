@@ -5,23 +5,168 @@
  * Result; shader layouts remain owned by the original WGSL asset compiler.
  */
 import * as Half from "../../prism/src/half.js";
-import { $debugF64, $debugStr, $f64ToInt, $unwrap, $unwrapOk } from "@rust-js/std";
+import {
+  $f64ToInt,
+  $sink,
+  $unwrap,
+  $unwrapOk,
+  $writeDebugOption,
+  $writeDebugStr,
+  $writeDebugStruct,
+  $writeDebugTuple,
+  $writeFloat,
+  $writingInto,
+} from "@rust-js/std";
 
 function detailValueDebug_fmt(detailValue) {
+  const f = $sink();
   if (typeof detailValue === "string") {
-    return `Text(${$debugStr(detailValue)})`;
+    $writeDebugTuple(
+      f,
+      "Text",
+      [
+        [
+          detailValue,
+          (f, value) => {
+            $writeDebugStr(f, value);
+          },
+        ],
+      ],
+      false,
+    );
+    return f.done();
   }
-  return `Number(${$debugF64(detailValue)})`;
+  $writeDebugTuple(
+    f,
+    "Number",
+    [
+      [
+        detailValue,
+        (f, value) => {
+          $writeFloat(f, value, "G", false);
+        },
+      ],
+    ],
+    false,
+  );
+  return f.done();
 }
 function detailValueFromStr_from(value) {
   return value;
 }
 
 function packingDetailDebug_fmt(packingDetail) {
-  return `PackingDetail { reason: ${$debugStr(packingDetail.reason)}, path: ${$debugStr(packingDetail.path)}, expected: ${detailValueDebug_fmt(packingDetail.expected)}, actual: ${detailValueDebug_fmt(packingDetail.actual)}, type: ${packingDetail.type == null ? "None" : `Some(${$debugStr(packingDetail.type)})`} }`;
+  const f = $sink();
+  $writeDebugStruct(
+    f,
+    "PackingDetail",
+    [
+      [
+        "reason",
+        packingDetail.reason,
+        (f, value) => {
+          $writeDebugStr(f, value);
+        },
+      ],
+      [
+        "path",
+        packingDetail.path,
+        (f, value) => {
+          $writeDebugStr(f, value);
+        },
+      ],
+      [
+        "expected",
+        packingDetail.expected,
+        (f, value) => {
+          $writingInto(f, detailValueDebug_fmt, value);
+        },
+      ],
+      [
+        "actual",
+        packingDetail.actual,
+        (f, value) => {
+          $writingInto(f, detailValueDebug_fmt, value);
+        },
+      ],
+      [
+        "type",
+        packingDetail.type,
+        (f, value) => {
+          $writeDebugOption(
+            f,
+            value,
+            (f, value) => {
+              $writeDebugStr(f, value);
+            },
+            false,
+          );
+        },
+      ],
+    ],
+    false,
+  );
+  return f.done();
 }
 export function packingErrorDebug_fmt(packingError) {
-  return `PackingError { code: ${$debugStr(packingError.code)}, message: ${$debugStr(packingError.message)}, fix: ${packingError.fix == null ? "None" : `Some(${$debugStr(packingError.fix)})`}, where: ${$debugStr(packingError.where)}, detail: ${packingError.detail == null ? "None" : `Some(${packingDetailDebug_fmt(packingError.detail)})`} }`;
+  const f = $sink();
+  $writeDebugStruct(
+    f,
+    "PackingError",
+    [
+      [
+        "code",
+        packingError.code,
+        (f, value) => {
+          $writeDebugStr(f, value);
+        },
+      ],
+      [
+        "message",
+        packingError.message,
+        (f, value) => {
+          $writeDebugStr(f, value);
+        },
+      ],
+      [
+        "fix",
+        packingError.fix,
+        (f, value) => {
+          $writeDebugOption(
+            f,
+            value,
+            (f, value) => {
+              $writeDebugStr(f, value);
+            },
+            false,
+          );
+        },
+      ],
+      [
+        "where",
+        packingError.where,
+        (f, value) => {
+          $writeDebugStr(f, value);
+        },
+      ],
+      [
+        "detail",
+        packingError.detail,
+        (f, value) => {
+          $writeDebugOption(
+            f,
+            value,
+            (f, value) => {
+              $writingInto(f, packingDetailDebug_fmt, value);
+            },
+            false,
+          );
+        },
+      ],
+    ],
+    false,
+  );
+  return f.done();
 }
 
 export function tryPack(layout, value) {

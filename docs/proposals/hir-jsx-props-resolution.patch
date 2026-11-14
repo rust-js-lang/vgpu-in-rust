@@ -1,0 +1,932 @@
+diff --git a/TESTS.md b/TESTS.md
+index 27c09e6..4822f11 100644
+--- a/TESTS.md
++++ b/TESTS.md
+@@ -11,6 +11,7 @@ As of 2026-10-30, `main` at `120772e2`; times are CI's, check run 41022723550.
+ | ↳ the nightly's files (`nightly` in `scripts/shard.ts`, ADR 1030) | 23 files, ~130 tests: tidy's stages, the read cases, the object model's sample (#891), iterator forms, determinism (#866), the `&mut` matrix, the iterator matrix's sample, the declarations' generated TypeScript callers (ADR 1091; each `None` form a `.d.ts` admits, of 86 cases, #822, which a change to what a `None` is at the JS boundary runs per push too), fuzz's seeds, generated match trees (#771), the release's packaging, React's releases, the editor's check, the harness, build history; not the guide's limitations or the bindings' coverage ratchets, which a change can leave untrue unseen, so each push and plain `check:fast` run them (ADR 1030, amended) | What each says; a mutation that names one still runs it | ~1,000 s of CPU, run only by the nightly's suite, `--nightly` |
+ | ↳ corpus | 1,580 Rust programs (`test/corpus/*.rs`) | Each one's JS prints what native Rust prints, and matches its snapshot; built as a library too, each push only the 120 marked `library-differs`, the nightly every one (ADR 0360) | about half the suite |
+ | ↳ the other 168 files | ~2,360 tests | Lowering rules, diagnostics, bindings (js, webapi, React, Node), hosts (Vite, Next, cargo), `rust-js test` by each runner (node, bun, Vitest, Jest; ADR 1076), React's ported modules against their snapshots, docs, architecture | the rest |
++| Imported JSX props (`test/jsx-imported-props.test.ts`, 2026-11-14, #1794) | 3 tests | Imported, renamed and qualified React props render expected SSR markup and compile as native metadata; plain Range/type-alias props and unrelated macros stay literal; re-exports and lexical shadows preserve the owned builder | Under 1 s warm for the fixtures; compiler rebuild excluded |
+ | `cargo test` | 57 unit tests | Tidy's passes and decisions | <1 min |
+ | Mutations | ~7,700 (`scripts/mutations/`) | Each rule has a test that fails without it | a check runs only the changed ones: ~10 min on up to 16 machines; built up to 32 to a compiler (ADR 1031) |
+ | rustc's suite | 3,770 run-pass tests, 1,492 of them out of scope | rustc's own programs run the same as JS | a check runs a sample in 1 min; all of them take ~2 h 45 min |
+diff --git a/docs/architecture.md b/docs/architecture.md
+index 3a5f0ec..057ec99 100644
+--- a/docs/architecture.md
++++ b/docs/architecture.md
+@@ -165,7 +165,7 @@ Project check hooks run after publication and may still fail the command.
+ 
+ | Phase | Owns | Must not do |
+ | --- | --- | --- |
+-| Syntax expansion | JSX-to-Rust syntax and source provenance | Bypass rustc or choose JS representations |
++| Syntax expansion | JSX-to-Rust syntax and source provenance; constructors.rs asks resolved HIR whether an imported props struct owns a generated companion, with selective driver replay | Bypass rustc or choose JS representations |
+ | Analysis | Validated bindings, indexes, names and crate/body facts | Emit functions or write output |
+ | Lowering pipeline | Scheduling, codecs, retention policy and module assembly | Resolve import aliases or publish |
+ | MIR and domain lowering | Evaluation order, control flow, places, copies, drops and representations | Format text or choose artifact paths |
+diff --git a/docs/decisions/0213-props-as-written.md b/docs/decisions/0213-props-as-written.md
+index 2b5de42..a2a2322 100644
+--- a/docs/decisions/0213-props-as-written.md
++++ b/docs/decisions/0213-props-as-written.md
+@@ -102,8 +102,8 @@ error: missing prop `href` of `ButtonLinkProps`
+ ## Costs
+ 
+ - **A Rust caller still writes `Some(..)`** of an `Option` prop.
+-- **A component's props type beside it, or a `Default` struct, has a
+-  companion**: one elsewhere is given a struct literal, as before.
++- **A props type without a companion uses a struct literal**. Imported
++  companions are selected using Rust resolution, as described below.
+ 
+ ## Since
+ 
+@@ -124,3 +124,33 @@ error: missing prop `href` of `ButtonLinkProps`
+   `test/jsx.test.ts`'s "a companion macro needs no docs in a crate that
+   denies missing_docs" holds it, and that an item of the crate's own is
+   still flagged.
++
++- **Ordinary wrappers of imported props use their owned companion**
++  (2026-11-14, #1794). The syntax pass previously knew only companions it
++  made in the current module, so a wrapper of imported or renamed React
++  attributes attempted a literal with nonexistent flattened fields.
++  Constructor generation now lives in jsx_syntax/constructors.rs. It records
++  unresolved ordinary-wrapper props by source identity. After expansion, Rust's
++  resolved HIR type identifies the struct; its defining module's macro must
++  carry the compiler-generated jsx_props marker. A same-name user macro is
++  insufficient. The driver replays parsing only when discovery finds a
++  companion that changes the constructor, carrying owned decisions rather
++  than rustc IDs between sessions; the replay checks those facts again.
++  Crates without a changed constructor continue in the original session.
++  Serde attributes are captured before the HIR query consumes the resolver
++  AST. Metadata, Clippy and lowering use the same syntax boundary. Imported
++  builders resolve in the hygienic component macro’s defining module. Rust
++  already protects them from lexical macro_rules shadows; a proposed explicit
++  self:: qualification was removed when its mutation survived. Plain structs, std::ops::Range and type
++  aliases without their own macro keep their existing literal construction.
++  A type alias itself does not create a new props companion.
++  Case N: JavaScript and native Rust observables are unchanged for previously
++  accepted programs; this lifts a JSX typing refusal. Native Rust's opaque
++  JSX placeholder cannot observe these fields, so SSR comparisons against
++  explicit expected markup and existing evaluation-order tests hold the
++  boundary. Compiler mutations cover the constructor, ownership marker,
++  resolution and literal fallback.
++
++  Remaining development-loop limitation: an early source warning may be
++  printed by both discovery and replay. This does not change runtime behavior
++  or bypass Rust diagnostics; diagnostic buffering remains follow-up work.
+diff --git a/docs/dev-loop.md b/docs/dev-loop.md
+index 0c18d64..98f9707 100644
+--- a/docs/dev-loop.md
++++ b/docs/dev-loop.md
+@@ -179,3 +179,23 @@ Also in use, with no single before and after:
+ | Experiment | Status | Where |
+ |---|---|---|
+ | The metamorphic net's 16 rewrites of #1203 and #1204, timed on their first run (ldAC, 2026-11-10) | Measured, not yet sped up. On the 12-core M6, every case in both builds: the five loud rewrites 6.5 min in 12 parts (one part 15 min with #1214's hang, since fixed); the eleven contexts 47 min in 11 parts, most of it `test/reduced.ts` reducing each of their 68 failures, up to 300 s each, one after another in its part, the same program's plain and std failures reduced apart. A listed failure isn't reduced, so once the 68 are in `test/metamorphic-known.txt` the nightly pays their runs, not their reductions. Its reductions now run at once within each case's test, within its timeout (#1365, Active); one program's reduction shared by its builds, and across a part's cases, is still to do | `test/reduced.ts`, `test/metamorphic.test.ts` |
++
++## Imported JSX props discovery checkpoint (2026-11-14)
++
++The app-private #1794 prototype ran check:fast --all in 761 s with no kept
++compiles after the compiler changed. All fourteen corpus parts, the metamorphic
++parts, typecheck, formatting, Clippy, cargo tests, Vite, and the other suite files
++completed. The gate failed three checks: a redundant lexical-qualification
++mutation survived, and the mutation inventory and CI inventory both found a
++Clippy site changed from take() to clone(). The qualification was removed and
++the site retargeted; 219 focused JSX/Clippy/inventory tests then passed, and all
++four selected new/retargeted mutations were caught. This is a failed broad gate
++plus passing targeted corrections, not a claim of one passing broad run. The
++corpus timing warnings accompanied empty compile caches and concurrent mutation
++work; no hang was observed in the live process inspection.
++
++Remaining slow spot: a wrapper of imported props that owns a companion needs a
++second Rust compiler session before body analysis. Crates with no changed
++constructor continue in their first session. Early source warnings can currently
++print twice on replay. A native resolver/expansion integration or diagnostic
++buffering would remove that duplication; do not suppress Rust warnings to hide it.
+diff --git a/docs/guide/react/jsx.md b/docs/guide/react/jsx.md
+index 96e8822..07b7875 100644
+--- a/docs/guide/react/jsx.md
++++ b/docs/guide/react/jsx.md
+@@ -126,6 +126,13 @@ Lists and conditions are Rust's iterators, `then`, `map` and `if`: see
+ `vec![jsx! { <li key="a">{"a"}</li> }, jsx! { <li key="b">{"b"}</li> }]` is
+ `[<li key="a">a</li>, <li key="b">b</li>]`.
+ 
++Imported props retain their generated builder too: an ordinary wrapper taking
++React's AnchorHTMLAttributes can accept its flattened className alongside href,
++including when the type is imported under another name or re-exported. Rust
++resolves the type; an unrelated same-name macro is never a props builder. A
++plain struct without a generated builder still requires its literal fields.
++A type alias alone creates no additional props macro.
++
+ ## Attributes
+ 
+ An attribute is written by its JSX name, and only so: `className`,
+diff --git a/scripts/mutations/jsx_syntax/constructors.ts b/scripts/mutations/jsx_syntax/constructors.ts
+new file mode 100644
+index 0000000..435cead
+--- /dev/null
++++ b/scripts/mutations/jsx_syntax/constructors.ts
+@@ -0,0 +1,112 @@
++// Mutations of src/jsx_syntax/constructors.rs (ADR 0093).
++import type {Mutation} from "../../mutations";
++export const mutations: Mutation[] = [
++  {
++    name: "props-macro-not-allowed",
++    breaks: "a component's props `macro` writes `#[rust_js::jsx]` on an expression, which its expansion may not",
++    file: "src/jsx_syntax/constructors.rs",
++    find: "        format!(\"#[allow_internal_unstable(stmt_expr_attributes)] macro {ident} {body}\"),\n",
++    replace: "        format!(\"macro {ident} {body}\"),\n",
++    tests: ["test/crates.test.ts","-t","component of another crate"],
++  },
++  {
++    name: "component-props-literal",
++    breaks: "a component's props are a struct literal, where a flattened struct's names aren't its fields",
++    file: "src/jsx_syntax/constructors.rs",
++    find: "    let companion = local_companion || imported.is_some();",
++    replace: "    let companion = false;",
++    tests: ["test/jsx-props.test.ts", "-t", "flattened props where they"],
++  },
++  {
++    name: "consumer-arm-missing",
++    breaks: "a context's macro has no `@consumer` arm, so `<THEME.Consumer>` matches none",
++    file: "src/jsx_syntax/constructors.rs",
++    find: "        arms.push(arm(\n            \"@consumer\",\n            &call(&format!(\"::react::consumer({target})\"), consumed),\n        ));\n",
++    replace: "",
++    tests: ["test/jsx-types.test.ts", "-t", "by its Consumer, and a portal"],
++  },
++  {
++    name: "held-component-static-props",
++    breaks: "a `thread_local!` component takes only `'static` props, so a caller's borrowed `text` doesn't live long enough",
++    file: "src/jsx_syntax/constructors.rs",
++    find: "    let held = matches!(item.kind, ItemKind::Static(_)) && companion",
++    replace: "    let held = false && matches!(item.kind, ItemKind::Static(_)) && companion",
++    tests: ["test/jsx-evaluation-order.test.ts", "-t", "thread_local component takes props"],
++  },
++  {
++    name: "generic-component-untyped",
++    breaks: "a generic component's props `macro` has no arm of its type arguments, so `<Generic::<i32> value={8} />` matches none",
++    file: "src/jsx_syntax/constructors.rs",
++    find: "    } else if matches!(&item.kind, ItemKind::Fn(f) if !f.generics.params.is_empty()) {",
++    replace: "    } else if false {",
++    tests: ["test/jsx.test.ts", "-t", "JSX covers generic functions, memo"],
++  },
++  {
++    name: "provider-member-unmatched",
++    breaks: "a context's `<THEME.Provider>` has no arm in its `macro`, so it matches none",
++    file: "src/jsx_syntax/constructors.rs",
++    find: "        arms.push(arm(\"@provider\", &call(&format!(\"::react::provider({target})\"), &value)));\n",
++    replace: "",
++    tests: ["test/jsx.test.ts", "-t", "work on React 18 while newer APIs stay gated"],
++  },
++  {
++    name: "const-component-props-literal",
++    breaks: "a constant's component, of props in another module, builds them as a struct literal, without their companion's defaults",
++    file: "src/jsx_syntax/constructors.rs",
++    find: "        || (matches!(item.kind, ItemKind::Const(_)) && !props.is_empty())\n",
++    replace: "",
++    tests: ["test/jsx-types.test.ts", "-t", "children declared any node"]
++  },
++  {
++    name: "static-component-props-literal",
++    breaks: "a thread_local memo of a component in another module builds its props as a struct literal, an Option not given an error",
++    file: "src/jsx_syntax/constructors.rs",
++    find: "        || (matches!(item.kind, ItemKind::Static(_)) && !props.is_empty() && !props.starts_with(\"::react::\"));",
++    replace: ";",
++    tests: ["test/jsx-evaluation-order.test.ts", "-t", "another module's props leaves out"]
++  },
++  {
++    name: "class-component-ref-a-prop",
++    breaks: "a class component's `ref`, `<Gauge ref={..} />`, is a field of its props, which have none, where it's its instance, React's (ADR 1041, amended)",
++    file: "src/jsx_syntax/constructors.rs",
++    find: "    } else if let ItemKind::Struct(class, ..) = &item.kind {\n",
++    replace: "    } else if let ItemKind::Struct(class, ..) = &item.kind\n        && false\n    {\n",
++    tests: ["test/class-components.test.ts", "-t", "ref is its instance"],
++  },
++  {
++    name: "imported-jsx-props-literal",
++    breaks: "imported flattened props are constructed literally instead of using their owned companion",
++    find: "let companion = local_companion || imported.is_some();",
++    replace: "let companion = local_companion;",
++    tests: [
++      "test/jsx-imported-props.test.ts",
++      "-t",
++      "ordinary wrappers use imported"
++    ],
++    file: "src/jsx_syntax/constructors.rs"
++  },
++  {
++    name: "imported-jsx-props-unmarked-macro",
++    breaks: "an unrelated same-name macro is mistaken for a generated props builder",
++    find: "&& tcx.get_attrs_by_path(def, &marker).next().is_some()",
++    replace: "&& { let _ = marker; true }",
++    tests: [
++      "test/jsx-imported-props.test.ts",
++      "-t",
++      "preserve literal props"
++    ],
++    file: "src/jsx_syntax/constructors.rs"
++  },
++  {
++    name: "imported-jsx-props-unresolved",
++    breaks: "the syntax-only discovery result is used without resolving the imported struct",
++    find: "resolved.insert(at, owned);",
++    replace: "resolved.insert(at, false);",
++    tests: [
++      "test/jsx-imported-props.test.ts",
++      "-t",
++      "ordinary wrappers use imported"
++    ],
++    file: "src/jsx_syntax/constructors.rs"
++  },
++];
+diff --git a/scripts/mutations/jsx_syntax/parser.ts b/scripts/mutations/jsx_syntax/parser.ts
+index d5cb39a..6267bfa 100644
+--- a/scripts/mutations/jsx_syntax/parser.ts
++++ b/scripts/mutations/jsx_syntax/parser.ts
+@@ -10,14 +10,6 @@ export const mutations: Mutation[] = [
+     replace: "            if false && tag {\n                expr = call(\n",
+     tests: ["test/jsx-events.test.ts", "-t", "tag's element"],
+   },
+-  {
+-    name: "props-macro-not-allowed",
+-    breaks: "a component's props `macro` writes `#[rust_js::jsx]` on an expression, which its expansion may not",
+-    file: "src/jsx_syntax/parser.rs",
+-    find: "        format!(\"#[allow_internal_unstable(stmt_expr_attributes)] macro {ident} {body}\"),\n",
+-    replace: "        format!(\"macro {ident} {body}\"),\n",
+-    tests: ["test/crates.test.ts","-t","component of another crate"],
+-  },
+   {
+     name: "struct-update-refused",
+     breaks: "\`<Image src=.. {..Default::default()} />\` is an error, named props and a base",
+@@ -42,14 +34,6 @@ export const mutations: Mutation[] = [
+     replace: "        if c.is_ascii_uppercase() {\n",
+     tests: ["test/next.test.ts", "-t", "next build builds"],
+   },
+-  {
+-    name: "component-props-literal",
+-    breaks: "a component's props are a struct literal, where a flattened struct's names aren't its fields",
+-    file: "src/jsx_syntax/parser.rs",
+-    find: "    let companion = props.rsplit(\"::\").next().is_some_and(|name| built.contains(name))\n",
+-    replace: "    let companion = props.rsplit(\"::\").next().is_some_and(|_| false)\n",
+-    tests: ["test/jsx-props.test.ts", "-t", "flattened props where they"],
+-  },
+   {
+     name: "flattened-names-refused",
+     breaks: "a name a flattened struct has is refused as the props' own",
+@@ -114,14 +98,6 @@ export const mutations: Mutation[] = [
+     replace: "",
+     tests: ["test/jsx-types.test.ts", "-t", "by its Consumer, and a portal"],
+   },
+-  {
+-    name: "consumer-arm-missing",
+-    breaks: "a context's macro has no `@consumer` arm, so `<THEME.Consumer>` matches none",
+-    file: "src/jsx_syntax/parser.rs",
+-    find: "        arms.push(arm(\n            \"@consumer\",\n            &call(&format!(\"::react::consumer({target})\"), consumed),\n        ));\n",
+-    replace: "",
+-    tests: ["test/jsx-types.test.ts", "-t", "by its Consumer, and a portal"],
+-  },
+   {
+     name: "literal-unchecked",
+     breaks: "a literal of an attribute of a few strings isn't checked: `<img referrerPolicy=\"no-referer\">` compiles, as TypeScript's doesn't",
+@@ -170,14 +146,6 @@ export const mutations: Mutation[] = [
+     replace: "                \"MemoExoticComponent\" | \"LazyExoticComponent\" | \"ForwardRefExoticComponent\" => {",
+     tests: ["test/next.test.ts", "-t", "next build builds"],
+   },
+-  {
+-    name: "held-component-static-props",
+-    breaks: "a `thread_local!` component takes only `'static` props, so a caller's borrowed `text` doesn't live long enough",
+-    file: "src/jsx_syntax/parser.rs",
+-    find: "    let held = matches!(item.kind, ItemKind::Static(_)) && companion",
+-    replace: "    let held = false && matches!(item.kind, ItemKind::Static(_)) && companion",
+-    tests: ["test/jsx-evaluation-order.test.ts", "-t", "thread_local component takes props"],
+-  },
+   {
+     name: "props-lifetimes-kept",
+     breaks: "a props struct's `'static` form keeps its lifetimes, `LabelProps<'a>`, so a `thread_local!` component's caller still borrows for good",
+@@ -226,14 +194,6 @@ export const mutations: Mutation[] = [
+     replace: "            .is_some_and(|at| at + 1 != attrs.len())\n",
+     tests: ["test/jsx.test.ts", "-t", "component props, keys and children evaluate in source order"],
+   },
+-  {
+-    name: "generic-component-untyped",
+-    breaks: "a generic component's props `macro` has no arm of its type arguments, so `<Generic::<i32> value={8} />` matches none",
+-    file: "src/jsx_syntax/parser.rs",
+-    find: "    } else if matches!(&item.kind, ItemKind::Fn(f) if !f.generics.params.is_empty()) {",
+-    replace: "    } else if false {",
+-    tests: ["test/jsx.test.ts", "-t", "JSX covers generic functions, memo"],
+-  },
+   {
+     name: "profiler-not-builtin",
+     breaks: "`<Profiler>` is taken for a component of the program's, whose props `macro` isn't there, not React's built-in",
+@@ -242,14 +202,6 @@ export const mutations: Mutation[] = [
+     replace: "",
+     tests: ["test/jsx.test.ts", "-t", "JSX built-ins finish as elements"],
+   },
+-  {
+-    name: "provider-member-unmatched",
+-    breaks: "a context's `<THEME.Provider>` has no arm in its `macro`, so it matches none",
+-    file: "src/jsx_syntax/parser.rs",
+-    find: "        arms.push(arm(\"@provider\", &call(&format!(\"::react::provider({target})\"), &value)));\n",
+-    replace: "",
+-    tests: ["test/jsx.test.ts", "-t", "work on React 18 while newer APIs stay gated"],
+-  },
+   {
+     name: "effectful-ref-uncaptured",
+     breaks: "a component's `ref` that does something, `ref={record(1); r}`, is read after its props, where it's written before them",
+@@ -298,14 +250,6 @@ export const mutations: Mutation[] = [
+     replace: "        ItemKind::Const(c) if false => {\n            let TyKind::FnPtr(f) = &c.ty.kind else { return None };",
+     tests: ["test/jsx-types.test.ts", "-t", "children declared any node"]
+   },
+-  {
+-    name: "const-component-props-literal",
+-    breaks: "a constant's component, of props in another module, builds them as a struct literal, without their companion's defaults",
+-    file: "src/jsx_syntax/parser.rs",
+-    find: "        || (matches!(item.kind, ItemKind::Const(_)) && !props.is_empty())\n",
+-    replace: "",
+-    tests: ["test/jsx-types.test.ts", "-t", "children declared any node"]
+-  },
+   {
+     name: "any-node-children-moved",
+     breaks: "children declared any node, `&'a dyn ReactNode`, are given as they are, not by reference",
+@@ -330,14 +274,6 @@ export const mutations: Mutation[] = [
+     replace: "            && let Some(props) = spread.clone()",
+     tests: ["test/jsx-props.test.ts", "-t", "props updated from a reference are spread"]
+   },
+-  {
+-    name: "static-component-props-literal",
+-    breaks: "a thread_local memo of a component in another module builds its props as a struct literal, an Option not given an error",
+-    file: "src/jsx_syntax/parser.rs",
+-    find: "        || (matches!(item.kind, ItemKind::Static(_)) && !props.is_empty() && !props.starts_with(\"::react::\"));",
+-    replace: ";",
+-    tests: ["test/jsx-evaluation-order.test.ts", "-t", "another module's props leaves out"]
+-  },
+   {
+     name: "aria-attribute-unnamed",
+     breaks: "`<div aria_label>` is rustc's \"no method named `aria_label`\", not what to write",
+@@ -394,14 +330,6 @@ export const mutations: Mutation[] = [
+     replace: "            if intrinsic {\n                expr = call(\n",
+     tests: ["test/class-components.test.ts", "-t", "a tag that's a string"],
+   },
+-  {
+-    name: "class-component-ref-a-prop",
+-    breaks: "a class component's `ref`, `<Gauge ref={..} />`, is a field of its props, which have none, where it's its instance, React's (ADR 1041, amended)",
+-    file: "src/jsx_syntax/parser.rs",
+-    find: "    } else if let ItemKind::Struct(class, ..) = &item.kind {\n",
+-    replace: "    } else if let ItemKind::Struct(class, ..) = &item.kind\n        && false\n    {\n",
+-    tests: ["test/class-components.test.ts", "-t", "ref is its instance"],
+-  },
+   {
+     name: "class-elsewhere-unrefused",
+     breaks: "an element of a class whose impl of `Component` is in another module than its struct is rustc's `cannot find macro`, not rust-js's word to move the impl (ADR 1041, amended)",
+diff --git a/scripts/mutations/main.ts b/scripts/mutations/main.ts
+index 1a08fbe..1fd6df8 100644
+--- a/scripts/mutations/main.ts
++++ b/scripts/mutations/main.ts
+@@ -119,8 +119,8 @@ export const mutations: Mutation[] = [
+     name: "clippy-without-liveness",
+     breaks: "`rust-js clippy` has no rust-js tool nor its liveness (ADR 0888): a struct JS reads is said never read, and `#[rust_js::..]` is an unknown tool",
+     file: "src/main.rs",
+-    find: "        register_tool(config);\n        clippy::configure(config, self.value.take());\n",
+-    replace: "        clippy::configure(config, self.value.take());\n",
++    find: "        register_tool(config);\n        clippy::configure(config, self.value.clone());\n",
++    replace: "        clippy::configure(config, self.value.clone());\n",
+     tests: ["test/clippy.test.ts", "-t", "rust-js clippy says what clippy finds"],
+   },
+   {
+diff --git a/src/jsx_syntax.rs b/src/jsx_syntax.rs
+index a6aba81..a36cc3d 100644
+--- a/src/jsx_syntax.rs
++++ b/src/jsx_syntax.rs
+@@ -2,6 +2,8 @@
+ //! Expand into typed React bindings before name resolution. Original tokens
+ //! keep their spans; there are no intermediate source files to map through.
+ 
++mod constructors;
++pub(crate) use constructors::{replay as replay_props, resolve as resolve_props, start as start_props};
+ pub mod formatting;
+ mod literals;
+ mod parser;
+diff --git a/src/jsx_syntax/constructors.rs b/src/jsx_syntax/constructors.rs
+new file mode 100644
+index 0000000..551d185
+--- /dev/null
++++ b/src/jsx_syntax/constructors.rs
+@@ -0,0 +1,226 @@
++//! Hygienic JSX component constructors, separate from token parsing.
++use super::parser::{Classes, companion_item, signature};
++use super::template;
++use crate::collections::IndexSet;
++use rustc_ast::{self as ast, ItemKind};
++use rustc_hir::{
++    self as hir,
++    def::{DefKind, Res},
++};
++use rustc_middle::ty::TyCtxt;
++use rustc_session::Session;
++use rustc_span::Span;
++use rustc_span::Symbol;
++use std::collections::{BTreeMap, BTreeSet};
++use std::sync::Mutex;
++
++/// A hygienic props constructor beside a component. Rust resolves its props
++/// type in the definition's module, including aliases and private imports.
++/// Calling it through an imported/renamed component uses Rust's macro
++/// namespace. Its props are built by their type's companion where it has
++/// one, `built` (ADR 0213), else they're a struct literal.
++pub(super) fn component(
++    sess: &Session,
++    item: &ast::Item,
++    built: &IndexSet<String>,
++    classes: &Classes,
++) -> Option<Box<ast::Item>> {
++    let (ident, target, props, handle) = signature(sess, item, classes)?;
++    // A constant's props, or a `thread_local!`'s memo's, are another
++    // component's, wherever it is, whose companion is beside them, imported
++    // with them.
++    let local_companion = built.contains(&props)
++        || (matches!(item.kind, ItemKind::Const(_)) && !props.is_empty())
++        || (matches!(item.kind, ItemKind::Static(_)) && !props.is_empty() && !props.starts_with("::react::"));
++    let imported = if !local_companion && !props.is_empty() && matches!(item.kind, ItemKind::Fn(_)) {
++        imported(sess, ident.span, &props)
++    } else {
++        None
++    };
++    let companion = local_companion || imported.is_some();
++    let builder = imported.as_deref().unwrap_or(&props);
++    let pattern = if props.is_empty() {
++        ""
++    } else {
++        "$($field:ident: $value:expr,)* $(..$base:expr)?"
++    };
++    let value = if props.is_empty() {
++        "()".to_string()
++    } else if companion {
++        format!("{builder}!(@given [$($field: $value,)*] [$($base)?])")
++    } else {
++        format!("{props} {{ $($field: $value,)* $(..$base)? }}")
++    };
++    // A `thread_local!`'s takes props of any lifetime, as its props' companion
++    // says their `'static` form (ADR 0265).
++    let held = matches!(item.kind, ItemKind::Static(_)) && companion && props != "::react::ProviderProps";
++    let function = if held { "static_component" } else { "component" };
++    let call = |target: &str, value: &str| format!("#[rust_js::jsx] ::react::{function}({target}, {value})");
++    let arm = |prefix: &str, body: &str| format!("({prefix} {pattern}) => {{ {body} }}");
++    let mut arms = vec![arm("", &call(&target, &value))];
++    let ref_value = match companion {
++        true => format!("{props}!(@given [r#ref: $reference, $($field: $value,)*] [$($base)?])"),
++        false => format!("{props} {{ r#ref: $reference, $($field: $value,)* $(..$base)? }}"),
++    };
++    if let Some(handle) = handle {
++        let body = format!(
++            "#[rust_js::jsx] ({}).r#ref(::react::checked_ref::<{handle}, _, _>($reference))",
++            call(&target, &value)
++        );
++        arms.push(arm("@ref ($reference:expr)", &body));
++    } else if let ItemKind::Struct(class, ..) = &item.kind {
++        // A class component's `ref` is its instance, which React gives it,
++        // not one of its props (ADR 1041, amended).
++        let body = format!(
++            "#[rust_js::jsx] ::react::class_ref::<{class}, _>({}, $reference)",
++            call(&target, &value)
++        );
++        arms.push(arm("@ref ($reference:expr)", &body));
++    } else if !props.is_empty() {
++        arms.push(arm("@ref ($reference:expr)", &call(&target, &ref_value)));
++    }
++    if props == "::react::ProviderProps" {
++        arms.push(arm("@provider", &call(&format!("::react::provider({target})"), &value)));
++        // Its `Consumer`'s props are its children, a function of its value.
++        let consumed = "::react::ConsumerProps { $($field: $value,)* $(..$base)? }";
++        arms.push(arm(
++            "@consumer",
++            &call(&format!("::react::consumer({target})"), consumed),
++        ));
++    } else if matches!(&item.kind, ItemKind::Fn(f) if !f.generics.params.is_empty()) {
++        let target = format!("{target}::<$($types)*>");
++        arms.push(arm("@types ($($types:tt)*)", &call(&target, &value)));
++        if !props.is_empty() {
++            arms.push(arm(
++                "@types ($($types:tt)*) @ref ($reference:expr)",
++                &call(&target, &ref_value),
++            ));
++        }
++    }
++    let body = format!("{{ {} }}", arms.join(","));
++    // Its expansion writes `#[rust_js::jsx]` on an expression too (ADR 0110).
++    let tokens = template(
++        sess,
++        format!("#[allow_internal_unstable(stmt_expr_attributes)] macro {ident} {body}"),
++        item.span,
++    );
++    companion_item(sess, tokens, "JSX component props", item)
++}
++
++/// Rust name resolution owns which imported type a component takes and whether
++/// its defining module declares our props companion. A discovery session stops
++/// before body checking only when its literal needs replacing by that builder.
++/// The replay carries owned answers, never rustc IDs or interned symbols.
++type SourceKey = (rustc_span::FileName, u32);
++enum Pass {
++    Discover(BTreeSet<SourceKey>),
++    Ready(BTreeMap<SourceKey, bool>),
++    Replay(BTreeMap<SourceKey, bool>),
++    Complete,
++}
++static PASS: Mutex<Pass> = Mutex::new(Pass::Complete);
++
++pub(crate) fn start() {
++    *PASS.lock().expect("JSX props resolution") = Pass::Discover(BTreeSet::new());
++}
++pub(crate) fn replay() -> bool {
++    let mut pass = PASS.lock().expect("JSX props resolution");
++    if matches!(*pass, Pass::Ready(_)) {
++        let Pass::Ready(resolved) = std::mem::replace(&mut *pass, Pass::Complete) else {
++            unreachable!()
++        };
++        *pass = Pass::Replay(resolved);
++        true
++    } else {
++        false
++    }
++}
++fn key(sess: &Session, span: Span) -> SourceKey {
++    let file = sess.source_map().lookup_source_file(span.lo());
++    (file.name.clone(), span.lo().0 - file.start_pos.0)
++}
++fn imported(sess: &Session, span: Span, props: &str) -> Option<String> {
++    let mut pass = PASS.lock().expect("JSX props resolution");
++    let at = key(sess, span);
++    match &mut *pass {
++        Pass::Discover(requests) => {
++            requests.insert(at);
++            None
++        }
++        Pass::Replay(resolved) if resolved.get(&at) == Some(&true) => Some(props.to_string()),
++        Pass::Replay(_) | Pass::Ready(_) | Pass::Complete => None,
++    }
++}
++fn owns_companion(tcx: TyCtxt<'_>, props: rustc_span::def_id::DefId) -> bool {
++    let module = tcx.parent(props);
++    let marker = [Symbol::intern("rust_js"), Symbol::intern("jsx_props")];
++    let owns = |def| {
++        matches!(tcx.def_kind(def), DefKind::Macro(_))
++            && tcx.opt_parent(def) == Some(module)
++            && tcx.item_name(def) == tcx.item_name(props)
++            && tcx.get_attrs_by_path(def, &marker).next().is_some()
++    };
++    if module.is_local() {
++        tcx.hir_crate_items(()).definitions().any(|id| owns(id.to_def_id()))
++    } else {
++        tcx.module_children(module)
++            .iter()
++            .filter_map(|child| child.res.opt_def_id())
++            .any(owns)
++    }
++}
++/// Return true to stop this discovery session before its provisional literals
++/// are checked. With no changed constructor, the original session continues.
++pub(crate) fn resolve(tcx: TyCtxt<'_>) -> bool {
++    let previous = {
++        let mut pass = PASS.lock().expect("JSX props resolution");
++        match &*pass {
++            Pass::Discover(requests) if requests.is_empty() => return false,
++            Pass::Ready(_) | Pass::Complete => return false,
++            _ => std::mem::replace(&mut *pass, Pass::Complete),
++        }
++    };
++    let requests: BTreeSet<_> = match &previous {
++        Pass::Discover(requests) => requests.clone(),
++        Pass::Replay(resolved) => resolved.keys().cloned().collect(),
++        Pass::Ready(_) | Pass::Complete => unreachable!(),
++    };
++    let mut resolved: BTreeMap<_, _> = requests.iter().cloned().map(|key| (key, false)).collect();
++    for id in tcx
++        .hir_crate_items(())
++        .definitions()
++        .filter(|&id| tcx.def_kind(id) == DefKind::Fn)
++    {
++        let Some(span) = tcx.def_ident_span(id) else { continue };
++        let at = key(tcx.sess, span);
++        if !requests.contains(&at) {
++            continue;
++        }
++        let node = tcx.hir_node_by_def_id(id);
++        let Some(decl) = node.fn_decl() else { continue };
++        let Some(input) = decl.inputs.first() else { continue };
++        // A type alias alone imports no macro. Preserve its literal path;
++        // ordinary use/re-export aliases resolve directly to the struct.
++        let hir::TyKind::Path(hir::QPath::Resolved(_, path)) = input.kind else {
++            continue;
++        };
++        let Res::Def(DefKind::Struct, props) = path.res else {
++            continue;
++        };
++        let owned = owns_companion(tcx, props);
++        resolved.insert(at, owned);
++    }
++    match previous {
++        Pass::Discover(_) if resolved.values().any(|&companion| companion) => {
++            *PASS.lock().expect("JSX props resolution") = Pass::Ready(resolved);
++            true
++        }
++        Pass::Replay(expected) if expected != resolved => {
++            tcx.dcx()
++                .err("rust-js: imported JSX props changed during resolution; compile the unchanged sources again");
++            true
++        }
++        Pass::Discover(_) | Pass::Replay(_) => false,
++        Pass::Ready(_) | Pass::Complete => unreachable!(),
++    }
++}
+diff --git a/src/jsx_syntax/parser.rs b/src/jsx_syntax/parser.rs
+index adb8fc4..33f469d 100644
+--- a/src/jsx_syntax/parser.rs
++++ b/src/jsx_syntax/parser.rs
+@@ -9,6 +9,7 @@ use rustc_parse::parser::{AllowConstBlockItems, ForceCollect, Parser};
+ use rustc_session::Session;
+ use rustc_span::{ErrorGuaranteed, Ident, Span};
+ 
++pub(super) use super::constructors::component;
+ use super::formatting::Layout;
+ use super::literals;
+ use super::{TagNames, rust_expression, template};
+@@ -730,7 +731,11 @@ fn renders(ty: &ast::Ty, optional: bool) -> bool {
+ 
+ /// A component's name, what it's called by, its props' type and, of a
+ /// `ForwardRef`, its handle's: `None` of what's no component.
+-fn signature(sess: &Session, item: &ast::Item, classes: &Classes) -> Option<(Ident, String, String, Option<String>)> {
++pub(super) fn signature(
++    sess: &Session,
++    item: &ast::Item,
++    classes: &Classes,
++) -> Option<(Ident, String, String, Option<String>)> {
+     let attrs = super::configured_attrs(sess, &item.attrs)?;
+     let signature = match &item.kind {
+         // A class component, a `#[rust_js::class]` struct whose impl of
+@@ -858,92 +863,6 @@ pub(super) fn props_names(sess: &Session, item: &ast::Item, classes: &Classes) -
+         .collect()
+ }
+ 
+-/// A hygienic props constructor beside a component. Rust resolves its props
+-/// type in the definition's module, including aliases and private imports.
+-/// Calling it through an imported/renamed component uses Rust's macro
+-/// namespace. Its props are built by their type's companion where it has
+-/// one, `built` (ADR 0213), else they're a struct literal.
+-pub(super) fn component(
+-    sess: &Session,
+-    item: &ast::Item,
+-    built: &IndexSet<String>,
+-    classes: &Classes,
+-) -> Option<Box<ast::Item>> {
+-    let (ident, target, props, handle) = signature(sess, item, classes)?;
+-    // A constant's props, or a `thread_local!`'s memo's, are another
+-    // component's, wherever it is, whose companion is beside them, imported
+-    // with them.
+-    let companion = props.rsplit("::").next().is_some_and(|name| built.contains(name))
+-        || (matches!(item.kind, ItemKind::Const(_)) && !props.is_empty())
+-        || (matches!(item.kind, ItemKind::Static(_)) && !props.is_empty() && !props.starts_with("::react::"));
+-    let pattern = if props.is_empty() {
+-        ""
+-    } else {
+-        "$($field:ident: $value:expr,)* $(..$base:expr)?"
+-    };
+-    let value = if props.is_empty() {
+-        "()".to_string()
+-    } else if companion {
+-        format!("{props}!(@given [$($field: $value,)*] [$($base)?])")
+-    } else {
+-        format!("{props} {{ $($field: $value,)* $(..$base)? }}")
+-    };
+-    // A `thread_local!`'s takes props of any lifetime, as its props' companion
+-    // says their `'static` form (ADR 0265).
+-    let held = matches!(item.kind, ItemKind::Static(_)) && companion && props != "::react::ProviderProps";
+-    let function = if held { "static_component" } else { "component" };
+-    let call = |target: &str, value: &str| format!("#[rust_js::jsx] ::react::{function}({target}, {value})");
+-    let arm = |prefix: &str, body: &str| format!("({prefix} {pattern}) => {{ {body} }}");
+-    let mut arms = vec![arm("", &call(&target, &value))];
+-    let ref_value = match companion {
+-        true => format!("{props}!(@given [r#ref: $reference, $($field: $value,)*] [$($base)?])"),
+-        false => format!("{props} {{ r#ref: $reference, $($field: $value,)* $(..$base)? }}"),
+-    };
+-    if let Some(handle) = handle {
+-        let body = format!(
+-            "#[rust_js::jsx] ({}).r#ref(::react::checked_ref::<{handle}, _, _>($reference))",
+-            call(&target, &value)
+-        );
+-        arms.push(arm("@ref ($reference:expr)", &body));
+-    } else if let ItemKind::Struct(class, ..) = &item.kind {
+-        // A class component's `ref` is its instance, which React gives it,
+-        // not one of its props (ADR 1041, amended).
+-        let body = format!(
+-            "#[rust_js::jsx] ::react::class_ref::<{class}, _>({}, $reference)",
+-            call(&target, &value)
+-        );
+-        arms.push(arm("@ref ($reference:expr)", &body));
+-    } else if !props.is_empty() {
+-        arms.push(arm("@ref ($reference:expr)", &call(&target, &ref_value)));
+-    }
+-    if props == "::react::ProviderProps" {
+-        arms.push(arm("@provider", &call(&format!("::react::provider({target})"), &value)));
+-        // Its `Consumer`'s props are its children, a function of its value.
+-        let consumed = "::react::ConsumerProps { $($field: $value,)* $(..$base)? }";
+-        arms.push(arm(
+-            "@consumer",
+-            &call(&format!("::react::consumer({target})"), consumed),
+-        ));
+-    } else if matches!(&item.kind, ItemKind::Fn(f) if !f.generics.params.is_empty()) {
+-        let target = format!("{target}::<$($types)*>");
+-        arms.push(arm("@types ($($types:tt)*)", &call(&target, &value)));
+-        if !props.is_empty() {
+-            arms.push(arm(
+-                "@types ($($types:tt)*) @ref ($reference:expr)",
+-                &call(&target, &ref_value),
+-            ));
+-        }
+-    }
+-    let body = format!("{{ {} }}", arms.join(","));
+-    // Its expansion writes `#[rust_js::jsx]` on an expression too (ADR 0110).
+-    let tokens = template(
+-        sess,
+-        format!("#[allow_internal_unstable(stmt_expr_attributes)] macro {ident} {body}"),
+-        item.span,
+-    );
+-    companion_item(sess, tokens, "JSX component props", item)
+-}
+-
+ /// The companion of a `#[rust_js::class]` struct whose impl of react's
+ /// `Component` isn't beside it, which has no element: one written is
+ /// refused where it is, saying to move the impl, not rustc's `cannot find
+@@ -1053,7 +972,12 @@ pub(super) fn field_symbol_uses(sess: &Session, item: &ast::Item) -> Vec<Box<ast
+ }
+ 
+ /// A companion's macro, parsed of `tokens`, of `item`'s visibility.
+-fn companion_item(sess: &Session, tokens: TokenStream, what: &'static str, item: &ast::Item) -> Option<Box<ast::Item>> {
++pub(super) fn companion_item(
++    sess: &Session,
++    tokens: TokenStream,
++    what: &'static str,
++    item: &ast::Item,
++) -> Option<Box<ast::Item>> {
+     let mut parser = Parser::new(&sess.psess, tokens, Some(what));
+     match parser.parse_item(ForceCollect::No, AllowConstBlockItems::No) {
+         Ok(Some(mut companion)) => {
+@@ -1351,7 +1275,7 @@ pub(super) fn props_companion(
+         );
+         arms
+     };
+-    let source = format!("macro {name} {{ {} }}", arms.join(", ")).replace("NAME", &name);
++    let source = format!("#[rust_js::jsx_props] macro {name} {{ {} }}", arms.join(", ")).replace("NAME", &name);
+     companion_item(sess, template(sess, source, item.span), "JSX props", item)
+ }
+ 
+diff --git a/src/main.rs b/src/main.rs
+index 0b84ae7..b80b867 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -196,6 +196,9 @@ impl Callbacks for Syntax {
+     }
+ 
+     fn after_expansion<'tcx>(&mut self, _compiler: &Compiler, tcx: TyCtxt<'tcx>) -> Compilation {
++        if jsx_syntax::resolve_props(tcx) {
++            return Compilation::Stop;
++        }
+         jsx_syntax::check_crate_id(tcx.stable_crate_id(LOCAL_CRATE));
+         Compilation::Continue
+     }
+@@ -227,7 +230,7 @@ struct Clippy {
+ impl Callbacks for Clippy {
+     fn config(&mut self, config: &mut rustc_interface::interface::Config) {
+         register_tool(config);
+-        clippy::configure(config, self.value.take());
++        clippy::configure(config, self.value.clone());
+     }
+ 
+     fn after_crate_root_parsing(&mut self, compiler: &Compiler, krate: &mut rustc_ast::Crate) -> Compilation {
+@@ -242,7 +245,7 @@ impl Callbacks for Clippy {
+ /// rustc, run with `args` by `Clippy`.
+ #[cfg(not(target_os = "wasi"))]
+ fn linted(args: Vec<String>, value: String) -> ExitCode {
+-    rustc_driver::catch_with_exit_code(|| rustc_driver::run_compiler(&args, &mut Clippy { value: Some(value) }))
++    run_with_resolved_props(&args, &mut Clippy { value: Some(value) })
+ }
+ 
+ /// The playground lints nothing: clippy's crates are the native compiler's.
+@@ -314,9 +317,12 @@ impl Callbacks for RustJs {
+     }
+ 
+     fn after_expansion<'tcx>(&mut self, _compiler: &Compiler, tcx: TyCtxt<'tcx>) -> Compilation {
+-        jsx_syntax::check_crate_id(tcx.stable_crate_id(LOCAL_CRATE));
+-        // 0. `#[serde(..)]`, which only the expanded crate still has (ADR 0077).
++        // Preserve expanded attributes before props resolution asks for HIR,
++        // which steals the resolver AST (ADR 0077).
+         let serde_attrs = lower::serde_attributes(tcx);
++        if matches!(Syntax.after_expansion(_compiler, tcx), Compilation::Stop) {
++            return Compilation::Stop;
++        }
+         // The lowering session, its caches its own, dropped as it ends (ADR
+         // 1111); and its flags: std's structs as their meaning, all of them,
+         // in std's own bodies' build and the differential one (ADR 0932);
+@@ -588,7 +594,7 @@ fn run() -> ExitCode {
+         Ok(command::Command::Rustc(args)) => {
+             let ours = std::iter::once("rust-js").chain(command::RUST_JS_CFG).map(String::from);
+             let rustc_args: Vec<String> = ours.chain(args).collect();
+-            return rustc_driver::catch_with_exit_code(|| rustc_driver::run_compiler(&rustc_args, &mut Syntax));
++            return run_with_resolved_props(&rustc_args, &mut Syntax);
+         }
+         // A crate's checks of its JS as a host has it, once Cargo is done (ADR 0117).
+         Ok(command::Command::Checks(checks)) => {
+@@ -787,7 +793,7 @@ fn compile(build: command::Build) -> Result<ExitCode, String> {
+         local_js: output::LocalJs::new(&plan),
+         dep_info: !cargo && dep_info.is_some(),
+     };
+-    let exit = rustc_driver::catch_with_exit_code(|| rustc_driver::run_compiler(&rustc_args, &mut callbacks));
++    let exit = run_with_resolved_props(&rustc_args, &mut callbacks);
+     // Once rustc has written the metadata: if it couldn't, nothing is published.
+     if let Some((linked, sources)) = callbacks.lowered.take()
+         && exit == ExitCode::SUCCESS
+@@ -861,3 +867,16 @@ fn compile(build: command::Build) -> Result<ExitCode, String> {
+     }
+     Ok(exit)
+ }
++
++/// Resolve imported JSX props before checking their constructed values. Crates
++/// without such wrappers keep one compiler session; changed constructors replay
++/// parsing with Rust's resolved answers, then run ordinary full analysis.
++fn run_with_resolved_props(args: &[String], callbacks: &mut (impl Callbacks + Send)) -> ExitCode {
++    jsx_syntax::start_props();
++    let exit = rustc_driver::catch_with_exit_code(|| rustc_driver::run_compiler(args, callbacks));
++    if exit == ExitCode::SUCCESS && jsx_syntax::replay_props() {
++        rustc_driver::catch_with_exit_code(|| rustc_driver::run_compiler(args, callbacks))
++    } else {
++        exit
++    }
++}
+diff --git a/test/jsx-imported-props.test.ts b/test/jsx-imported-props.test.ts
+new file mode 100644
+index 0000000..d1fce40
+--- /dev/null
++++ b/test/jsx-imported-props.test.ts
+@@ -0,0 +1,66 @@
++import {beforeAll,expect,test} from 'bun:test';
++import {writeFileSync} from 'node:fs';
++import {join} from 'node:path';
++import {createElement} from 'react';
++import {renderToStaticMarkup} from 'react-dom/server';
++import {buildReact,compiler,fixture,run,target} from './support';
++beforeAll(buildReact,60_000);
++test('ordinary wrappers use imported and renamed flattened props companions',async()=>{
++ const dir=fixture('jsx-imported-props');
++ writeFileSync(join(dir,'lib.rs'),`use react::{JSX,jsx};
++ use react::attributes::AnchorHTMLAttributes;
++ use react::attributes::AnchorHTMLAttributes as RenamedProps;
++ pub fn Wrapped(props: AnchorHTMLAttributes<'_>) -> JSX::Element { jsx! {<a {...props} />} }
++ pub fn Renamed(props: RenamedProps<'_>) -> JSX::Element { jsx! {<a {...props} />} }
++ pub fn Qualified(props: react::attributes::AnchorHTMLAttributes<'_>) -> JSX::Element { jsx! {<a {...props} />} }
++ mod glob { use react::attributes::*; use react::{JSX,jsx}; pub fn Glob(props:AnchorHTMLAttributes<'_>)->JSX::Element {jsx!{<a {...props}/>}} }
++ use glob::Glob;
++ pub fn App()->JSX::Element { jsx! {<><Wrapped href={Some("/one")} className={Some("first")} /><Renamed href={Some("/two")} className={Some("second")} /><Qualified href={Some("/three")} className={Some("third")} /><Glob href={Some("/four")} className={Some("fourth")} /></>} }
++ `);
++ run([compiler,join(dir,'lib.rs'),'-o',join(dir,'lib.js'),'--','--extern',`react=${join(target,'libreact.rmeta')}`,'-L',target]);
++ run([compiler,'--rustc','--edition=2024','--crate-type=lib','--crate-name=wrapped','--target=wasm32-unknown-unknown','--emit=metadata',join(dir,'lib.rs'),'--extern',`react=${join(target,'libreact.rmeta')}`,'-L',target,'-o',join(dir,'libwrapped.rmeta')]);
++ const lib=await import(join(dir,'lib.jsx'));
++ expect(renderToStaticMarkup(createElement(lib.App))).toBe('<a href="/one" class="first"></a><a href="/two" class="second"></a><a href="/three" class="third"></a><a href="/four" class="fourth"></a>');
++});
++
++test('ordinary wrappers preserve literal props without an owned builder',async()=>{
++ const dir=fixture('jsx-imported-props-literals');
++ writeFileSync(join(dir,'lib.rs'),`#![feature(decl_macro)]
++ use react::{JSX,jsx};
++ use std::ops::Range;
++ mod model {
++  pub struct Plain { pub text: &'static str }
++  pub macro Plain { ($($tokens:tt)*) => { compile_error!("unrelated macro called") } }
++ }
++ use model::Plain;
++ type Span = Range<u32>;
++ pub fn Ranged(props:Range<u32>)->JSX::Element { jsx! {<span>{props.start}{props.end}</span>} }
++ pub fn Aliased(props:Span)->JSX::Element { jsx! {<span>{props.start}{props.end}</span>} }
++ pub fn Text(props:Plain)->JSX::Element { jsx! {<span>{props.text}</span>} }
++ pub fn App()->JSX::Element { jsx! {<><Ranged start={1} end={2}/><Aliased start={3} end={4}/><Text text="plain"/></>} }
++ `);
++ run([compiler,join(dir,'lib.rs'),'-o',join(dir,'lib.js'),'--','--extern',`react=${join(target,'libreact.rmeta')}`,'-L',target]);
++ const lib=await import(join(dir,'lib.jsx'));
++ expect(renderToStaticMarkup(createElement(lib.App))).toBe('<span>12</span><span>34</span><span>plain</span>');
++});
++test('owned imported builders survive re-exports and lexical macro shadows',async()=>{
++ const dir=fixture('jsx-imported-props-reexport');
++ writeFileSync(join(dir,'lib.rs'),`use react::{JSX,jsx};
++ mod model {
++  #[derive(Default)]
++  pub struct Props<'a> {
++   pub href: Option<&'a str>,
++   #[rust_js::flatten] pub html: react::attributes::HTMLAttributes<'a>,
++  }
++ }
++ mod public { pub use super::model::Props as Visible; }
++ use public::Visible as Renamed;
++ macro_rules! Renamed { ($($tokens:tt)*) => { compile_error!("lexical macro shadow called") } }
++ pub fn Wrapped(props:Renamed<'_>)->JSX::Element { jsx! {<a href={props.href} className={props.html.class_name}/>} }
++ pub fn Qualified(props:public::Visible<'_>)->JSX::Element { jsx! {<a href={props.href} className={props.html.class_name}/>} }
++ pub fn App()->JSX::Element { jsx! {<><Wrapped href={Some("/one")} className={Some("first")}/><Qualified href={Some("/two")} className={Some("second")}/></>} }
++ `);
++ run([compiler,join(dir,'lib.rs'),'-o',join(dir,'lib.js'),'--','--extern',`react=${join(target,'libreact.rmeta')}`,'-L',target]);
++ const lib=await import(join(dir,'lib.jsx'));
++ expect(renderToStaticMarkup(createElement(lib.App))).toBe('<a href="/one" class="first"></a><a href="/two" class="second"></a>');
++});

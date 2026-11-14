@@ -6,12 +6,13 @@ React leaves and GPU building blocks; they do not prove a completed landing page
 ## Current checkpoint
 
 The published rust-js gitlink is
-`618662df715d2af347987d76ca8525fd7ab66f39` (2026-11-14), including the published
-#1784, #1785, #1786 and #1790 fixes. No downstream compiler source patch remains.
-The current full web crate is blocked by imported JSX props companions (#1794).
-See docs/checkpoint.md for the output-card work and focused validation; the
-application results below describe the earlier hero checkpoint unless stated otherwise.
-No private compiler commit is the gitlink.
+`7977d6f205090e273de0601e0425fa233ae38e9f` (2026-11-14), including all
+previous fixes and #1794 at 77a03e8e5. The submodule is unmodified and no active
+patch remains. The full app now compiles; 65 app tests (454,327 assertions),
+strict rust-js Clippy, 32 native and 32 compiled core tests, and seven upstream imported-props regressions pass.
+See docs/checkpoint.md for output-card evidence and docs/proposals for the
+inactive HIR prototype requested by upstream. Application results below are
+historical hero/renderer checkpoints unless explicitly updated.
 The upstream nullable-promise, async-declaration, basic derived-Debug and native
 Error-family fixes are used unchanged.
 
@@ -586,3 +587,36 @@ matches reference, while the reference redraw stays stable. This adds another
 observation to the unresolved GPU comparison investigation. No assertion was
 relaxed and no passing full browser gate is claimed. Core Rust was unchanged
 from the prior checkpoint’s 32 native/compiled checks.
+
+## Published imported-props fix and output section
+
+Adopted unmodified published 7977d6f205090e273de0601e0425fa233ae38e9f, including
+#1794 at 77a03e8e5. The full web crate builds, strict rust-js Clippy passes
+(7.44 s), 65 app tests pass with 454,327 assertions, and all seven upstream
+imported-props regressions pass. No active compiler patch remains. The HIR
+prototype is retained only as an inactive review proposal requested by the team.
+
+All eleven output-widget/assembled-section browser checks pass. Desktop/mobile
+light/dark comparisons check every rendered element’s exact Typed OM CSS and
+geometry, normalized markup and selected media bytes against native Next.
+Real MP4 playback, deferred asset activation, missing-observer fallback, CI
+timing/pause/resume and reduced motion are exercised. Original raw media is
+compared independently against the pinned upstream checkout. Screenshots under
+docs/screenshots/output-cards-* show actual media and source layout.
+
+The static generator now calls native Next optimizeImage directly. A controlled
+concurrency=1 experiment changed AVIF bytes and pixels, so it was reverted:
+production settings and their concurrency come from Next’s getSharp owner and
+are fingerprinted. The original test backend duplicated encoding and launched
+multiple half-core codecs beside GPU workers; caching reference results and
+running that file in order eliminated its full-suite timeouts. No test timeout
+was increased. An upstream-versus-upstream full-page screenshot control itself
+differed by 150 channels (maximum 2) around rounded edges; software/sRGB
+experiments did not fix it. Exact CSS, geometry, content and resource comparisons
+replace that invalid bitmap oracle; original GPU comparisons are unchanged.
+
+The final complete browser run passes 102/103 in 35.5 seconds. Low-quality packed
+dark graph wire-false-true has 52 differing background bytes. This remains part
+of the existing unresolved GPU comparison gate, not an accepted deviation or a
+claim that the whole browser suite passed. Full page content/root/fonts and
+Pages deployment still remain.

@@ -1,28 +1,19 @@
 # Output cards checkpoint
 
-This is an unfinished development checkpoint, not a deployable landing-page release.
+The complete landing-page milestone is still in progress; this is not a deployment announcement.
 
-## Included work
+## Published compiler
 
-- Rust CI output animation, deferred images, video playback/progress, and the four-card output section.
-- Original image and video assets, with build-time responsive AVIF/WebP/PNG generation.
-- Browser comparison fixtures and initial widget tests.
-- Published rust-js revision 618662df715d2af347987d76ca8525fd7ab66f39, replacing the downstream Battery API patch.
+The app uses unmodified rust-js 7977d6f205090e273de0601e0425fa233ae38e9f, including the imported JSX props fix at 77a03e8e5. No active compiler patch remains. The full Rust web crate now builds, and all generated widgets and the four-card section have been regenerated. Strict rust-js-aware Clippy passes, alongside all 32 native core tests and the same 32 compiled JavaScript tests.
 
-## Verification and remaining failures
+The upstream team received the failing case and compatibility constraints through agent-hub. Its seven imported-props tests pass locally, covering cross-crate props, aliases, required fields, privacy, Range and unrelated macros. An inactive HIR prototype requested for glob-import follow-up is retained under docs/proposals; the app does not apply it.
 
-At this checkpoint, static media tests pass: 11 tests and 336 assertions, including byte comparisons against the pinned native Next image encoder. git diff --check passes.
+## Output section
 
-The full Rust web build is blocked by imported JSX props flattening: https://github.com/rust-js-lang/rust-js/issues/1794. The failing compiler regression is retained in patches/rust-js/regressions/jsx-imported-props.test.ts. No compiler workaround is applied.
+Rust owns the original four-card section, CI timeline, deferred images and video. Original PNG, MP4 and SVG assets are retained. Static AVIF/WebP/PNG derivatives call the pinned native Next optimizer directly, including its geometry, encoders and concurrency policy, with the exact upstream-pinned Sharp build. Concurrency is fingerprinted because changing it changed AVIF bytes and decoded pixels in a controlled probe. The lockfile override prevents Next silently installing another native codec version; a test checks both resolve the same package and codec versions. Build-time asset generation is hash-validated and ignored by Git.
 
-Generated widget JavaScript predates the final Rust changes and must be regenerated after that compiler fix. The four-card section has no generated output yet. Do not treat the checked-in generated files as proof of a successful current build.
+All 65 app tests pass (454,327 assertions), including 13 static-media checks and independent byte comparisons with upstream raw assets. Meaningful browser checks cover CI timing and viewport pause/resume, reduced motion, video metadata/time formatting, actual retained video playback, responsive image activation and missing IntersectionObserver. Assembled light/dark mobile/desktop comparisons check normalized markup, every rendered element’s exact computed CSS and physical geometry, and selected image bytes against the native Next optimizer.
 
-All seven focused output-widget browser comparisons now pass. They cover CI timing and viewport pause/resume, reduced motion, video metadata/time formatting, actual retained video playback, mobile/desktop image activation with exact decoded pixel comparisons against the native Next optimizer, and missing IntersectionObserver.
+Whole-page screenshot equality was tested and rejected as an invalid oracle after unchanged upstream-versus-upstream controls also differed: one control changed 150 color channels by at most 2 around rounded card edges. Software CSS rasterization and software/sRGB rendering did not fix the control. The assertions use exact semantic values and bytes, with screenshots retained for human review; no pixel tolerance or per-pixel mixing is used. Native Typed OM records computed CSS; legacy getComputedStyle exposed unstable used values for the fixture’s auto margins even with identical geometry. Real WebGPU comparisons retain their separate strict oracle and earlier unresolved investigation.
 
-The earlier CI timeout was an image exception unmounting the page: the catalog covered deviceSizes but omitted imageSizes needed by 34vw. Asset generation now uses both native size lists and asks getImageProps for its additional development loader-probe widths; 144 derivatives are generated. Native getImageProps coverage prevents this omission recurring. CI mock visibility changes now target only its own observer.
-
-Image activation also exposed the CJS default-export ambiguity of next/image under Vite. The fixture uses Next's shipped ESM image entry, with no component shim; the production build must use that same vendor entry. Both implementations pass the exact pixel tests with this entry.
-
-These browser checks exercise the checked-in generated widgets described above, not a successful regeneration of the complete current Rust crate. The full build blocker and stale video output still require resolution. The previously recorded intermittent light GPU comparison also remains unresolved.
-
-The complete page shell, remaining landing sections, final parity checks, and GitHub Pages deployment remain outstanding. See implementation.md for the milestone requirements.
+All eleven output-card browser checks pass. Reference encodes are cached by input URL, and the codec-heavy file runs in order beside the parallel GPU suite to avoid oversubscription without changing native encoder settings. The final complete browser run passes 102/103 in 35.5 seconds; the remaining low-quality packed dark graph differs by 52 background bytes in wire-false-true. No GPU assertion was relaxed and the earlier GPU release blocker remains. The complete page shell, remaining sections/live demos, fonts, final full-page comparison, optional debug/performance surfaces and GitHub Pages deployment remain outstanding.

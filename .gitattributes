@@ -1,2 +1,5 @@
 # Unified-diff context lines contain an intentional single space.
 patches/**/*.patch -whitespace
+
+# Unified patches require a prefix space on blank context lines.
+docs/proposals/*.patch whitespace=-blank-at-eol

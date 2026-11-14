@@ -67,7 +67,7 @@ export function EveVideo() {
         <span className="relative h-px flex-1 bg-white/20">
           <span
             className="absolute inset-y-0 left-0 bg-white/80"
-            style={{ width: `${$displayF64(progress)}%` }}
+            style={{ width: `${progress.toString()}%` }}
           />
           <span
             className="absolute top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white"
