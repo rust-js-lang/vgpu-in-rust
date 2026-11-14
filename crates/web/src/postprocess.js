@@ -2,6 +2,7 @@
 
 /** Retained dark bloom and display presentation. WGSL remains unchanged. */
 import { BoundPipeline, ShaderBindings, UniformInput } from "./bindings.js";
+import { bloomFormatForLevel } from "./capabilities.js";
 import { encodeFullscreen, fullscreenPipeline, fullscreenVertex } from "./fullscreen.js";
 import { Allocations } from "./resources.js";
 import { shaderModule } from "./shader.js";
@@ -224,10 +225,7 @@ async function buildDarkPostprocess(device, scene, sampler, settings, allocation
       break;
     }
     const size = bloomLevelSize(scene.size.slice(), level);
-    const format =
-      level < 3 && device.features.has("rg11b10ufloat-renderable")
-        ? "rg11b10ufloat"
-        : "rgba16float";
+    const format = bloomFormatForLevel(device.features, level);
     const horizontal = Allocations.target(
       allocations,
       device,

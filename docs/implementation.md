@@ -71,3 +71,10 @@ preparation values and borrows runtime GPU handles; no mutable runtime borrow
 crosses asynchronous preparation. Quality layout changes are committed only at
 activation, so the previous scene remains usable while another prepares.
 PipelineQuality owns the shared high/low mesh dimensions and runtime capacity.
+
+BrowserRenderer owns DOM listeners/observers, responsive measurement, pointer
+easing, activity-aware scheduling, reveal/frame-rate decisions and deferred
+canvas/device teardown. CanvasSurface owns device negotiation and swapchain
+configuration/rollback; capabilities owns optional features and bloom formats.
+EnvironmentTexture records its first frame timestamp so the browser clock keeps
+the source's preparation-time origin. Scene graphs continue to own GPU passes.

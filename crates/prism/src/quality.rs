@@ -15,3 +15,21 @@ impl PipelineQuality {
         }
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum QualityPreference {
+    #[cfg_attr(rust_js, rust_js::name = "auto")]
+    Auto,
+    #[cfg_attr(rust_js, rust_js::name = "high")]
+    High,
+    #[cfg_attr(rust_js, rust_js::name = "low")]
+    Low,
+}
+impl QualityPreference {
+    pub fn initial_quality(self) -> PipelineQuality {
+        match self {
+            Self::Low => PipelineQuality::Low,
+            Self::Auto | Self::High => PipelineQuality::High,
+        }
+    }
+}

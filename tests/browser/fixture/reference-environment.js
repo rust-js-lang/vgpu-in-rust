@@ -26,3 +26,10 @@ export {LIGHT_GLASS_ACCENT_TUNING} from '@reference/app/[lang]/(home)/components
 export {createLightPipeline} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/light/index.ts';
 
 export {createPrismPipelineController} from '@reference/app/[lang]/(home)/components/prism-background/pipeline-controller.ts';
+
+export {createRenderer} from '@reference/app/[lang]/(home)/components/prism-background/renderer.ts';
+
+export {sceneUniforms as runtimeSceneUniforms,glassUniforms as runtimeGlassUniforms} from '@reference/app/[lang]/(home)/components/prism-background/runtime/uniforms.ts';
+export {lightWallUniforms,lightCausticUniforms} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/light/uniforms.ts';
+
+export {lightPresentUniforms} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/light/uniforms.ts';

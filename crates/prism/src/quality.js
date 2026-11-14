@@ -8,4 +8,10 @@ export const PipelineQuality = {
     return pipelineQuality === "high" ? lightMeshLayout(128, 24) : lightMeshLayout(64, 12);
   },
 };
+
+export const QualityPreference = {
+  initialQuality(qualityPreference) {
+    return qualityPreference === "low" ? "low" : "high";
+  },
+};
 //# sourceMappingURL=quality.js.map

@@ -7,3 +7,9 @@ export type PipelineQuality = "high" | "low";
 export const PipelineQuality: {
     meshLayout(pipelineQuality: PipelineQuality): LightMeshLayout;
 };
+
+export type QualityPreference = "auto" | "high" | "low";
+
+export const QualityPreference: {
+    initialQuality(qualityPreference: QualityPreference): PipelineQuality;
+};

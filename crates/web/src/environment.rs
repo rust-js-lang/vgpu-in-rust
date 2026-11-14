@@ -35,6 +35,7 @@ unsafe impl js::Defined for BlurParams {}
 pub struct EnvironmentTexture {
     pub texture: &'static GPUTexture,
     pub prepared: bool,
+    pub first_frame_ms: Option<f64>,
     label: String,
     bake_bindings: ShaderBindings,
     blur_bindings: Option<ShaderBindings>,
@@ -81,6 +82,7 @@ pub fn create_environment_texture(
     Ok(EnvironmentTexture {
         texture,
         prepared: false,
+        first_frame_ms: None,
         label: label.into(),
         bake_bindings,
         blur_bindings: None,
@@ -157,6 +159,10 @@ impl EnvironmentTexture {
         let bindings =
             self.bake_bindings
                 .bind(device, bake, &[], &format!("{}.bake", self.label))?;
+        // The source GPU clock starts at the first environment frame, before
+        // the visible canvas loop. Keep that time origin through preparation.
+        self.first_frame_ms
+            .get_or_insert_with(|| react::webapi::performance.now());
         submit_effect(device, bake, bindings, source);
         copy_into_level(device, source, self.texture, 0, &self.label);
         for level in 1..ENVIRONMENT_LEVELS {

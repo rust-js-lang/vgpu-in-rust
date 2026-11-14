@@ -68,3 +68,13 @@ Object.assign(window.shaderFixture,{createLightGraph,LightGraph});
 
 import {createPipelineController,PipelineController,SceneGraph} from '../../../crates/web/src/pipeline_controller.js';
 Object.assign(window.shaderFixture,{createPipelineController,PipelineController,SceneGraph});
+
+import {createRenderer,BrowserRenderer} from '../../../crates/web/src/browser_renderer.js';
+Object.assign(window.shaderFixture,{createRenderer,BrowserRenderer});
+
+import {RuntimeState} from '../../../crates/prism/src/runtime_state.js';
+import {lightWallUniforms,lightCausticUniforms} from '../../../crates/prism/src/light_uniforms.js';
+Object.assign(window.shaderFixture,{RuntimeState,lightWallUniforms,lightCausticUniforms});
+
+import {lightPresentUniforms} from '../../../crates/prism/src/light_uniforms.js';
+Object.assign(window.shaderFixture,{lightPresentUniforms});

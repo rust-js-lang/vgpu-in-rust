@@ -16,7 +16,8 @@ for(const [implementation,url] of [['Rust','/'],['Upstream','/reference.html']] 
       });
       await page.goto(url);
       await expect(active(page)).toHaveText(snippets.Prompt);
-      await page.clock.install();
+      await page.clock.install({time:new Date('2020-01-01T00:00:00Z')});
+      await page.clock.pauseAt(new Date('2020-01-01T00:01:00Z'));
       const copy=page.locator('[data-hero-tabs-copy]');
       const initial=(await copy.boundingBox())!;
       for(const [tab,text] of Object.entries(snippets)){

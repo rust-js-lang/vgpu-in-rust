@@ -5,6 +5,7 @@ import type { ShaderBindings } from "./bindings.js";
 export interface EnvironmentTexture {
     texture: GPUTexture;
     prepared: boolean;
+    firstFrameMs?: number | undefined;
     label: string;
     bakeBindings: ShaderBindings;
     blurBindings?: ShaderBindings | undefined;

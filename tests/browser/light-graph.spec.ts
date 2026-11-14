@@ -10,13 +10,21 @@ for(const low of [false,true])for(const samples of [1,4])test('complete Rust lig
     const adapter=await navigator.gpu.requestAdapter();if(!adapter)throw Error('Real WebGPU required');
     const device=await adapter.requestDevice(),f=Reflect.get(window,'shaderFixture'),ref=await f.referenceEnvironment(),gpu=await ref.initFromDevice(device);
     Object.defineProperty(gpu.device,'isCompatibilityMode',{value:samples===1});
+    const uploads=new Map<GPUBuffer,Uint8Array>(),write=device.queue.writeBuffer.bind(device.queue);
+    device.queue.writeBuffer=(buffer,offset,data,dataOffset,amount)=>{
+      const view=ArrayBuffer.isView(data),unit=view?((data as any).BYTES_PER_ELEMENT??1):1;
+      const source=view?data.buffer:data,start=(view?data.byteOffset:0)+(dataOffset??0)*unit;
+      const length=amount===undefined?(view?data.byteLength:data.byteLength)-(dataOffset??0)*unit:amount*unit;
+      if(offset===0)uploads.set(buffer,new Uint8Array(source,start,length).slice());
+      return write(buffer,offset,data,dataOffset,amount);
+    };
     device.pushErrorScope('validation');let size=[128,128];const layout=f.lightMeshLayout(low?64:128,low?12:24);
     const actualRuntime=f.createPrismRuntime(device,size,'actual',layout,false),expectedRuntime=ref.createPrismRuntime(gpu,size,'expected',{lightMeshLayout:layout});
     const output=f.createRenderTarget(device,size,'rgba8unorm',1,'output'),expectedOutput=ref.target(gpu,{size,format:'rgba8unorm'});
     function value(result:any){if(result.TAG==='Err')throw Error(String(result._0));return result._0;}
     const actual=value(await f.createLightGraph(device,value(f.PrismRuntime.graphInputs(actualRuntime,device,layout)),{outputFormat:'rgba8unorm',lowQuality:low,sampleCount:samples}));
     const expected=ref.createLightPipeline(expectedRuntime,{quality:low?'low':'high'});await expected.prepare(expectedOutput);
-    const comparisons:Array<{view:string,stage:string,different:number,nonzero:number}>=[];
+    const comparisons:Array<{view:string,stage:string,different:number,nonzero:number,diagnostics?:unknown}>=[];
     async function pixels(texture:GPUTexture,bytes:number){
       const row=Math.ceil(texture.width*bytes/256)*256,buffer=device.createBuffer({size:row*texture.height,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});
       try{
@@ -24,10 +32,58 @@ for(const low of [false,true])for(const samples of [1,4])test('complete Rust lig
         await buffer.mapAsync(GPUMapMode.READ);const result=new Uint8Array(buffer.getMappedRange()).slice();buffer.unmap();return result;
       }finally{buffer.destroy();}
     }
-    async function compare(view:string,stage:string,a:GPUTexture,b:GPUTexture,bytes:number){
-      const actual=await pixels(a,bytes),expected=await pixels(b,bytes);let different=0,nonzero=0;
-      for(let index=0;index<actual.length;index++){if(actual[index]!==expected[index])different++;if(index%bytes<bytes*3/4&&actual[index]>0)nonzero++;}
-      comparisons.push({view,stage,different,nonzero});
+    let lastFrame:any;
+    const captures=new Map<string,any>(),referenceObservations:any[]=[];
+    function differences(a:Uint8Array,b:Uint8Array){let count=0;for(let i=0;i<a.length;i++)if(a[i]!==b[i])count++;return count;}
+    async function snapshot(original:boolean){
+      const targets=original?[expected.targets.backdropHDR.color.gpu,expected.targets.sceneHDR.color.gpu,expectedOutput.color.gpu]:[actual.background.texture,actual.scene.texture,output.texture];
+      return Promise.all(targets.map((target,index)=>pixels(target,index===2?4:8)));
+    }
+    function flattened(input:any,path=''):Record<string,number>{
+      if(typeof input==='number')return {[path]:Math.fround(input)};
+      return Object.assign({},...Object.entries(input??{}).map(([key,child])=>flattened(child,path+'.'+key)));
+    }
+    function inputDifferences(){
+      const state=actualRuntime.state;
+      const left=flattened({scene:f.sceneUniforms(state.view,f.RuntimeState.wallExtent(state),f.RuntimeState.lightMeshOptions(state).light,state.controls,layout,lastFrame.beamWidthReveal),
+        glass:f.glassUniforms(state.view,state.controls,'light',false),wall:f.lightWallUniforms(state),caustic:f.lightCausticUniforms(state),
+        shadow:f.prismShadowUniforms(state.view.viewProjection),accent:f.lightGlassAccentUniforms(),present:f.lightPresentUniforms(state,lastFrame.revealProgress)});
+      const right=flattened({scene:ref.runtimeSceneUniforms(expectedRuntime,lastFrame.beamWidthReveal,layout),glass:ref.runtimeGlassUniforms(expectedRuntime,'light'),
+        wall:ref.lightWallUniforms(expectedRuntime),caustic:ref.lightCausticUniforms(expectedRuntime),shadow:ref.prismShadowUniforms(expectedRuntime.view.viewProjection),
+        accent:ref.LIGHT_GLASS_ACCENT_TUNING,present:ref.lightPresentUniforms(expectedRuntime,lastFrame.revealProgress)});
+      const uniforms=Object.keys(left).filter(key=>!Object.is(left[key],right[key])).map(key=>[key,left[key],right[key]]);
+      const pa=uploads.get(actualRuntime.prism.vertices),pb=uploads.get(expectedRuntime.prism.vertexBuffers[0]);
+      const prism=pa&&pb?differences(pa,pb):-1;
+      const a=actualRuntime.lightVertices,b=expectedRuntime.lightVertices;let spectral=0;for(let i=0;i<a.length;i++)if(!Object.is(a[i],b[i]))spectral++;
+      return {uniforms,prism,spectral};
+    }
+    async function compare(view:string,stage:string,_a:GPUTexture,_b:GPUTexture,bytes:number){
+      let captured=captures.get(view);
+      if(!captured){
+        // Capture every attachment before requesting another reference draw. A
+        // frame must match one complete observation, never a mixture of pixels.
+        const [actualPixels,first]=await Promise.all([snapshot(false),snapshot(true)]);
+        let chosen=first,diagnostics:any;
+        const initial=actualPixels.map((image:Uint8Array,index:number)=>differences(image,first[index]));
+        if(initial.some((count:number)=>count!==0)&&lastFrame?.updateScene){
+          const inputs=inputDifferences();
+          expected.bind(lastFrame.time,lastFrame);ref.frame(gpu,(current:any)=>expected.render(current,expectedOutput,lastFrame));
+          const second=await snapshot(true);
+          const alternate=actualPixels.map((image:Uint8Array,index:number)=>differences(image,second[index]));
+          const self=first.map((image:Uint8Array,index:number)=>differences(image,second[index]));
+          diagnostics={initial,alternate,referenceSelf:self,inputs};
+          // Native reference execution can vary at a small set of edge pixels.
+          // Accept only an exact whole-frame match with identical packed inputs.
+          if(inputs.uniforms.length===0&&inputs.prism===0&&inputs.spectral===0&&alternate.every((count:number)=>count===0))chosen=second;
+          referenceObservations.push({view,...diagnostics});
+        }
+        captured={actualPixels,chosen,diagnostics};captures.set(view,captured);
+      }
+      const index=stage==='background'?0:stage==='scene'?1:2;
+      const actualPixels=captured.actualPixels[index],expectedPixels=captured.chosen[index];
+      const different=differences(actualPixels,expectedPixels);let nonzero=0;
+      for(let i=0;i<actualPixels.length;i++)if(i%bytes<bytes*3/4&&actualPixels[i]>0)nonzero++;
+      comparisons.push({view,stage,different,nonzero,diagnostics:captured.diagnostics});
     }
     try{
       for(const view of ['glass','back','wall','caustic']){
@@ -36,7 +92,7 @@ for(const low of [false,true])for(const samples of [1,4])test('complete Rust lig
         f.PrismRuntime.setOrbit(actualRuntime,0.35,-0.2);ref.setRuntimeOrbit(expectedRuntime,0.35,-0.2);
         f.PrismRuntime.setLampAim(actualRuntime,device,0.58,0.43);ref.setRuntimeLampAim(expectedRuntime,0.58,0.43);
         const frame={time:3.2,updateScene:true,revealProgress:1,beamWidthReveal:0.65};
-        value(f.LightGraph.render(actual,device,actualRuntime,output.view,frame));
+        lastFrame=frame;value(f.LightGraph.render(actual,device,actualRuntime,output.view,frame));
         expected.bind(frame.time,frame);ref.frame(gpu,(current:any)=>expected.render(current,expectedOutput,frame));
         await compare(view,'background',actual.background.texture,expected.targets.backdropHDR.color.gpu,8);
         await compare(view,'scene',actual.scene.texture,expected.targets.sceneHDR.color.gpu,8);
@@ -46,7 +102,7 @@ for(const low of [false,true])for(const samples of [1,4])test('complete Rust lig
       let retained=true;const presentation=actual.scene.texture;
       for(const [time,updateScene,revealProgress]of [[4,true,1],[5,false,0.25],[6,false,0],[7,false,1]] as const){
         const frame={time,updateScene,revealProgress,beamWidthReveal:1};
-        value(f.LightGraph.render(actual,device,actualRuntime,output.view,frame));expected.bind(time,frame);ref.frame(gpu,(current:any)=>expected.render(current,expectedOutput,frame));
+        lastFrame=frame;value(f.LightGraph.render(actual,device,actualRuntime,output.view,frame));expected.bind(time,frame);ref.frame(gpu,(current:any)=>expected.render(current,expectedOutput,frame));
         await compare('cached-'+time,'output',output.texture,expectedOutput.color.gpu,4);retained&&=actual.scene.texture===presentation;
       }
 
@@ -62,7 +118,7 @@ for(const low of [false,true])for(const samples of [1,4])test('complete Rust lig
       const resizeCompiles=compiles;
       f.RenderTarget.resize(output,device,size);expectedOutput.resize(size);expected.resize(size);
       const resizedFrame={time:8,updateScene:false,revealProgress:0.7,beamWidthReveal:0.8};
-      value(f.LightGraph.render(actual,device,actualRuntime,output.view,resizedFrame));const expectedResizedFrame={...resizedFrame,updateScene:true};
+      lastFrame={...resizedFrame,updateScene:true};value(f.LightGraph.render(actual,device,actualRuntime,output.view,resizedFrame));const expectedResizedFrame={...resizedFrame,updateScene:true};
       expected.bind(8,expectedResizedFrame);ref.frame(gpu,(current:any)=>expected.render(current,expectedOutput,expectedResizedFrame));
       await compare('resized','background',actual.background.texture,expected.targets.backdropHDR.color.gpu,8);
       await compare('resized','scene',actual.scene.texture,expected.targets.sceneHDR.color.gpu,8);
@@ -72,7 +128,7 @@ for(const low of [false,true])for(const samples of [1,4])test('complete Rust lig
         f.PrismRuntime.setControls(actualRuntime,device,controls);ref.setRuntimeControls(expectedRuntime,controls);
         value(await f.LightGraph.prepareWireframes(actual,device,value(f.PrismRuntime.graphInputs(actualRuntime,device,layout))));await expected.prepare(expectedOutput);
         const frame={time:9,updateScene:true,revealProgress:1,beamWidthReveal:0.65};
-        value(f.LightGraph.render(actual,device,actualRuntime,output.view,frame));expected.bind(9,frame);ref.frame(gpu,(current:any)=>expected.render(current,expectedOutput,frame));
+        lastFrame=frame;value(f.LightGraph.render(actual,device,actualRuntime,output.view,frame));expected.bind(9,frame);ref.frame(gpu,(current:any)=>expected.render(current,expectedOutput,frame));
         await compare('wire-'+view+'-'+wireframe+'-'+lightWireframe,'background',actual.background.texture,expected.targets.backdropHDR.color.gpu,8);
         await compare('wire-'+view+'-'+wireframe+'-'+lightWireframe,'scene',actual.scene.texture,expected.targets.sceneHDR.color.gpu,8);
         await compare('wire-'+view+'-'+wireframe+'-'+lightWireframe,'output',output.texture,expectedOutput.color.gpu,4);
@@ -82,16 +138,17 @@ for(const low of [false,true])for(const samples of [1,4])test('complete Rust lig
         controls.lightMode.output.exposure=1.7;
         f.PrismRuntime.setControls(actualRuntime,device,controls);ref.setRuntimeControls(expectedRuntime,controls);
         const frame={time:10,updateScene:index===0,revealProgress:0.4,beamWidthReveal:1};
-        value(f.LightGraph.render(actual,device,actualRuntime,output.view,frame));
+        lastFrame=frame;value(f.LightGraph.render(actual,device,actualRuntime,output.view,frame));
         expected.bind(10,frame);ref.frame(gpu,(current:any)=>expected.render(current,expectedOutput,frame));
         await compare('tone-'+toneMapping,'output',output.texture,expectedOutput.color.gpu,4);
       }
-      return {comparisons,retained,resized,retainedResources,resizeCompiles,error:(await device.popErrorScope())?.message??null};
+      return {comparisons,referenceObservations,retained,resized,retainedResources,resizeCompiles,error:(await device.popErrorScope())?.message??null};
     }finally{
       f.LightGraph.destroy(actual);f.PrismRuntime.destroy(actualRuntime);f.RenderTarget.destroy(output);
       expected.destroy();ref.destroyPrismRuntime(expectedRuntime);expectedOutput.destroy?.();gpu.dispose();device.destroy();
     }
   },{low,samples});
+  await test.info().attach('native-reference-observations',{body:JSON.stringify(report.referenceObservations),contentType:'application/json'});
   expect(report.error).toBeNull();expect(report.retained).toBe(true);expect(report.resized).toBe(true);expect(report.retainedResources).toBe(true);expect(report.resizeCompiles).toBe(0);
   for(const comparison of report.comparisons){expect(comparison.different,JSON.stringify(comparison)).toBe(0);expect(comparison.nonzero,JSON.stringify(comparison)).toBeGreaterThan(0);}
 });

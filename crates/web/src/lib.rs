@@ -36,3 +36,8 @@ pub mod light_graph;
 pub mod wall;
 
 pub mod pipeline_controller;
+
+pub mod canvas_surface;
+pub mod capabilities;
+
+pub mod browser_renderer;

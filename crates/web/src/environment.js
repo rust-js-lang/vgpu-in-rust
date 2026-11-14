@@ -127,6 +127,9 @@ export const EnvironmentTexture = {
       return result;
     }
     const bindings = result._0;
+    // The source GPU clock starts at the first environment frame, before
+    // the visible canvas loop. Keep that time origin through preparation.
+    environmentTexture.firstFrameMs ??= performance.now();
     submitEffect(device, bake, bindings, source);
     copyIntoLevel(device, source, environmentTexture.texture, 0, environmentTexture.label);
     for (let level = 1; level < ENVIRONMENT_LEVELS; level++) {

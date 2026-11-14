@@ -1,5 +1,6 @@
 //! Retained dark bloom and display presentation. WGSL remains unchanged.
 use crate::bindings::{BoundPipeline, NamedResource, UniformInput};
+use crate::capabilities::bloom_format_for_level;
 use crate::fullscreen::{encode_fullscreen, fullscreen_pipeline, fullscreen_vertex};
 use crate::resources::Allocations;
 use crate::shader::{ShaderSource, shader_module};
@@ -150,11 +151,7 @@ async fn build_dark_postprocess(
     let mut levels: Vec<BloomLevel> = Vec::new();
     for level in 0..count {
         let size = bloom_level_size(scene.size, level);
-        let format = if level < 3 && device.features().has("rg11b10ufloat-renderable") {
-            "rg11b10ufloat"
-        } else {
-            "rgba16float"
-        };
+        let format = bloom_format_for_level(device.features(), level);
         let horizontal = allocations.target(
             device,
             size,

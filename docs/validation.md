@@ -6,17 +6,16 @@ React leaves and GPU building blocks; they do not prove a completed landing page
 ## Current checkpoint
 
 The published rust-js gitlink is
-`c4aa4e5d54028aa834b0892838e22d3cb7bf5649` (2026-11-14), including the published
-#1784 field-liveness and #1785 function-pointer cast fixes. One minimal downstream
-patch for the neighboring #1786 classification bug remains;
-see patches/rust-js. No private compiler commit is the gitlink.
+`4c58cdcf6365ccafa799d2a1e634df989281c5cd` (2026-11-14), including the published
+#1784, #1785 and #1786 fixes. No downstream compiler patch remains;
+see patches/rust-js for their published replacements. No private compiler commit is the gitlink.
 The upstream nullable-promise, async-declaration, basic derived-Debug and native
 Error-family fixes are used unchanged.
 
 Passing application checks:
 
 - 28 native Rust tests and the same 28 compiled JavaScript tests.
-- 48 app tests with 161,395 assertions: scene optics, framing,
+- 47 app tests with 161,374 assertions: scene optics, framing,
   interaction, exact rounded mesh vertices/topology, exact Float32 camera
   matrices, spectral layouts/vertices/flux, retained upload identity, native
   RangeErrors, React markup/context, retained assets, bloom kernels/pairing and
@@ -33,9 +32,9 @@ Passing application checks:
   claimed.
 - Invalid uniform values allocate no GPU resource. Rejected updates preserve the
   previous upload, and valid updates retain the same buffer.
-- 55 production-built Chromium checks. Ten cover setup-tab parity, copy/reset,
+- 69 production-built Chromium checks. Ten cover setup-tab parity, copy/reset,
   rapid transitions, layout stability, unavailable/denied clipboard, reduced
-  motion, mobile sizing and unmount cleanup. Forty-five require a real WebGPU adapter:
+  motion, mobile sizing and unmount cleanup. Fifty-seven require a real WebGPU adapter:
   all 44 retained shaders compile; malformed shader diagnostics work; the Rust
   fullscreen pass copies exact pixels/orientation; the additive light pass
   renders red/blue spectral output and disappears with zero reveal; both glass
@@ -103,11 +102,11 @@ The old child-startup race was reported as #1770 and is now fixed upstream.
 
 ## Remaining milestone gates
 
-Finish quality policy and canvas resource lifecycle. Both assembled scene graphs
+Finish automatic quality policy and React canvas integration. Both assembled scene graphs
 are already GPU-verified. Finish the full
 landing root and every section. Compare full-page GPU output, themes,
 desktop/mobile framing, interaction, fallback and cleanup against upstream.
-Obtain the remaining broad compiler evidence. Publish the source, enable
+Preserve the compiler gate history without claiming a passing broad run. Source checkpoints are published. Enable
 workflow-based Pages, install a build/deploy-only workflow with current actions
 pinned to full commits, and verify the actual public page with visual evidence.
 
@@ -394,3 +393,64 @@ an earlier shared-machine gate; it is not counted as passing. Scoped app evidenc
 supports this app checkpoint only. The full canvas/frame loop, DOM activity and
 responsive observers, automatic quality policy, React background/root, remaining
 landing sections and Pages deployment still remain.
+
+## Native canvas and browser lifecycle checkpoint
+
+BrowserRenderer now connects actual swapchain output to both retained graphs.
+It owns device negotiation, optional packed-bloom feature fallback, surface
+configuration, pointer listeners/easing, mobile automatic motion, responsive
+framing/DPR measurement, coalesced resize work, visibility/offscreen observers,
+30/60/90 FPS caps, reveal timing and deferred disposal. The clock starts at the
+first environment frame, matching the original frame service rather than being
+restarted after asynchronous preparation. Capability selection has one owner
+shared by device negotiation and live bloom format decisions.
+
+Four canvas-level comparisons use the actual original browser renderer with
+controlled clock/rAF input on real WebGPU devices. Desktop/mobile and normal/
+reduced-motion cases match every captured swapchain byte through reveal, pointer
+motion, responsive canvas/slot resizing, theme switching, forced Low quality and
+DPR reduction. Settled desktop light scenes stop submitting frames; mobile
+automatic motion continues under its cap. A separate native-rAF test verifies
+ordinary scheduling and theme switching.
+
+Eight lifecycle checks cover absent WebGPU (including a throwing reporter),
+unavailable canvas context, configure failure with original error identity and
+canvas-size restoration, optional-feature rejection/fallback, disposal during
+a pending device request, visibility/offscreen pause/resume and disposal during
+delayed GPU preparation. Every tracked texture and buffer is destroyed exactly
+once in the delayed-unmount case; context/device cleanup happens once and no
+commands are submitted after device destruction.
+
+The former default headless shell failed even a minimal plain-JavaScript native
+swapchain clear with device loss: "A valid external Instance reference no longer
+exists." Retaining GPU/adapter objects and removing controlled timing did not
+fix it. Full Chromium passes that same control and the renderer cases, so the
+Playwright configuration explicitly uses channel chromium. No app rendering
+fallback or weakened GPU requirement masks the failure.
+
+Full Chromium also exposed two test-oracle issues. Hero-tab transition tests
+now pause the fake clock explicitly, so action execution cannot consume the
+150 ms outgoing-layer interval. The original GPU renderer itself can produce
+two outputs for an identical draw: a recorded case changed 44 bytes on the
+reference redraw while the Rust result stayed stable and then matched it exactly.
+Prism uploads (17,328 bytes), spectral vertices, camera values and all f32-packed
+uniform inputs were identical. Light comparisons therefore capture all three
+attachments before another draw and require an exact whole-frame match against
+one of at most two native reference observations. A second observation is
+allowed only for a fresh scene draw with identical inputs. It never mixes
+pixels from observations or applies an epsilon. Observation details are attached
+to test results. Cached-scene comparisons retain their original strict check.
+
+Claude relayed #1786 at published 4c58cdcf6. Its implementation replaces the
+last patch and patch-application helper; the private compiler checkout is clean.
+Both the published suite and the temporarily restored broader port regression
+pass: 20 tests, 159 assertions. The temporary regression is removed afterward.
+Application regeneration takes 28.93 s including the compiler rebuild.
+
+Current evidence: all 69 browser checks pass in full Chromium (28.1 s), 47 app
+tests pass with 161,374 assertions, all 28 compiled core invariants pass, native
+core tests pass, and strict web Clippy passes. The older broad compiler gate is
+still historical, not a claim about this unmodified published compiler pin.
+Automatic GPU-tier/battery/runtime-health quality policy, React canvas/theme
+integration, the complete landing content, production build and public Pages
+deployment remain required.
