@@ -26,3 +26,4 @@ fn number_max(a: f64, b: f64) -> f64 {
 fn clamp(value: f64, low: f64, high: f64) -> f64 {
     number_min(high, number_max(low, value))
 }
+pub mod camera;

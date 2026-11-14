@@ -1,17 +1,18 @@
 # Validation evidence
 
 Implementation is in progress. The complete landing page is not deployed.
-The compiler now uses published rust-js `b0bc0a3f0d49291d5821b25c6efc17af022027a0`,
-fetched on 2026-11-14. Its WebAPI promise fix and regression are used unchanged.
-One reproducible downstream patch retains four outstanding fixes.
+The compiler now uses published rust-js `0fb07aed694681295a1f2132ee78fbf647f764ed`,
+fetched on 2026-11-14. Its WebAPI promise and async declaration fixes and regressions are used unchanged.
+One reproducible downstream patch retains three outstanding fixes.
 
 ## Passing application checks
 
-- Fourteen native Rust scene tests pass; the same fourteen also pass after
-  compilation to JavaScript. Native algorithms have not changed during the
-  compiler upgrade.
-- Sixteen app tests pass with 19,587 assertions: optics, interaction, framing,
+- Seventeen native Rust scene tests pass; the same seventeen also pass after
+  compilation to JavaScript. The new camera checks cover orbit/centering, matrix identity, wall containment
+  and environment rotation.
+- Eighteen app tests pass with 22,461 assertions: optics, interaction, framing,
   exact rounded mesh vertices/topology over fifteen shape/depth combinations,
+  exact camera Float32 storage/matrices and orbital basis over 90 configurations,
   exact React markup/context behavior, retained asset identity, and complete
   compiler patch reproducibility. The audit rejects unrecorded compiler edits.
 - Thirteen production-built Chromium checks pass: ten compare Rust and upstream
@@ -20,8 +21,10 @@ One reproducible downstream patch retains four outstanding fixes.
   Three require an actual WebGPU adapter: all 44 retained prism shaders compile,
   an invalid shader reports errors, and the Rust fullscreen pass copies exact
   RGBA pixels without reversing the image.
-- The compiler upgrade regenerates the existing scene and UI modules without
-  JavaScript changes. App compilation and rust-js-aware Clippy pass.
+- Previously ported scene and UI modules regenerate without JavaScript changes.
+  The new camera preserves shared view-projection identity and matches original
+  Float32 matrices exactly. A compensated norm removes the measured cancellation
+  mismatch from chained two-axis hypot calls. App compilation and rust-js-aware Clippy pass.
 
 The WGSL graph is byte-identical to the original. The fullscreen vertex stage
 also matches its original shader literal exactly. Rust owns module creation,
@@ -42,17 +45,14 @@ complete landing root and full-page visual comparison remain unfinished.
 - #1763: React hook handles retain exact payloads and runtime identity. Both the
   React 18 mutable-ref alias and React 19 canonical ref tests pass; the metadata
   reader mutation was caught.
-- #1769: async and opaque Future declarations retain associated Output types.
-  Strict positive/negative TypeScript callers and runtime resolution pass.
-  The output-bound mutation was caught. The earlier neighboring declaration run
-  passed 39 tests, and the guide preflight matched all 402 examples.
 
-The current focused run passes five tests: upstream's nullable-promise regression
-plus the four retained declaration/handle cases in three downstream files.
+
+The current focused run passes five tests: upstream's nullable-promise
+and async declaration regressions plus three retained cases in two downstream files.
 A clean application of the combined patch matches every private compiler edit.
 
 Upstream now owns the old Cow declaration, metamorphic partition, Cargo-input,
-memory-fixture and pool fixes, and the WebAPI promise fix (#1768). Their old
+memory-fixture and pool fixes, the WebAPI promise fix (#1768), and async declaration payloads (#1769). Their old
 patches and promise mutation helper are removed. See patches/rust-js/README.md
 for the published commits. No private compiler commit is used as the gitlink.
 
@@ -72,7 +72,10 @@ read the missing file. A bounded delayed-start probe independently reproduced
 that condition; it is reported as #1770. The run was stopped with exit 143 at the
 user's request to upgrade, before an overall result. Upstream's newer machine
 leases, pool backfilling and bounded footprint sampling supersede the old local
-validation-loop patches. A full passing gate on the current pin remains unproven.
+validation-loop patches. A later monitored run on b0bc0a3 was also stopped with exit 143 when the user
+requested the published async declaration fix. Completed stages are retained as
+scoped evidence; no overall passing result is claimed. A full passing gate on
+the current pin remains unproven.
 
 ## Remaining milestone gates
 

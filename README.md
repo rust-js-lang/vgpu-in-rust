@@ -12,7 +12,7 @@ See [UPSTREAM.md](UPSTREAM.md) for source provenance and [docs/implementation.md
 
 Use Bun. Clone with `git clone --recurse-submodules`. Run `bun run setup`, then `bun run compile`. Native scene checks: `cargo test -p vgpu-prism`.
 
-The current checkpoint contains scene mathematics, rounded prism geometry, initial React leaves, interactive setup tabs, Rust WebGPU effect building blocks and the original shader assets. The GPU renderer, complete page and deployment remain in progress.
+The current checkpoint contains scene mathematics, orbital camera/framing, rounded prism geometry, initial React leaves, interactive setup tabs, Rust WebGPU effect building blocks and the original shader assets. The GPU renderer, complete page and deployment remain in progress.
 
 Run `bun run test:native` and `bun run test:compiled` for the same Rust scene invariants on both runtimes. `bun run test` also compares generated modules with the original source. For those comparisons, keep the upstream repository in an adjacent `vgpu` directory at the revision in UPSTREAM.md, or set `VGPU_UPSTREAM_DIR` to that checkout. The test suite verifies its revision before comparing.
 

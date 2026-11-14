@@ -1,5 +1,5 @@
 diff --git a/TESTS.md b/TESTS.md
-index 27c09e6..fd290f4 100644
+index 27c09e6..1f91d86 100644
 --- a/TESTS.md
 +++ b/TESTS.md
 @@ -51,3 +51,11 @@ As of 2026-10-30, `main` at `120772e2`; times are CI's, check run 41022723550.
@@ -7,13 +7,13 @@ index 27c09e6..fd290f4 100644
  
  To recount: the test totals are the `Ran N tests` lines in a check's `test (k/2)` logs. The corpus is `ls test/corpus/*.rs | wc -l`, the mutations are `grep -rc 'name:' scripts/mutations`, and the rustc counts are the line counts of `test/rustc-*.txt`.
 +
-+Downstream landing-port regressions (2026-11-14): three new files cover typed
-+lazy storage, React hook handles (including React 18/19 refs), and async
-+declaration payloads. A Cow AsRef/Borrow corpus case compares strings, slices,
-+arrays, paths and both variants against native Rust. Six meaningful compiler
-+mutations remain. Nullable browser promises and their regression are now owned
-+by upstream b0bc0a3 (#1768), without a downstream override. Historical CI totals
-+above are not recounted in this downstream checkout.
++Downstream landing-port regressions (2026-11-14): two new files cover typed
++lazy storage and React hook handles (including React 18/19 refs). A Cow
++AsRef/Borrow corpus case compares strings, slices, arrays, paths and both
++variants with native Rust. Five meaningful compiler mutations remain. Nullable
++browser promises and async declarations are now upstream-owned (#1768, #1769),
++without downstream overrides. Historical CI totals above are not recounted
++in this downstream checkout.
 diff --git a/docs/architecture.md b/docs/architecture.md
 index 9380df2..02e1ff3 100644
 --- a/docs/architecture.md
@@ -58,29 +58,6 @@ index afdb897..5056c9d 100644
 +real React 18 Rust metadata and verifies the canonical alias plus strict
 +mutable-payload callers. This preserves the Rust handle's API across
 +supported React releases without adding another Rust ref type.
-diff --git a/docs/decisions/0196-typescript-declarations.md b/docs/decisions/0196-typescript-declarations.md
-index 781c302..1e0b0fb 100644
---- a/docs/decisions/0196-typescript-declarations.md
-+++ b/docs/decisions/0196-typescript-declarations.md
-@@ -248,3 +248,18 @@ method's rule of `tcx` alone, no catalog of its own. A crate's own enums
- are declared as they were. `test/declarations-collections.test.ts` checks
- TypeScript that narrows one against it, and one that reads its payload as
- a number refused; mutations `cow-declared-any` and `cow-owned-unnormalized`.
-+
-+## Amendment: opaque Future payloads (#1769, 2026-11-14)
-+
-+An opaque Future, including the result of an async function, is declared as
-+Promise of its associated Output. The existing opaque-type parts owner reads
-+rustc's instantiated Future::Output bound, beside its FnOnce::Output query.
-+Declarations consume that bound and use their existing type mapper for the
-+payload. Unit output is Promise<void>; generic output stays Promise<T>.
-+No emitted JavaScript shape is inspected or reconstructed.
-+
-+Case N (ADR 0262): runtime output is unchanged. This corrects a declaration
-+that previously widened every async result to any. The regression compiles
-+strict positive and negative TypeScript callers and checks actual resolved
-+values for strings, numbers, unit, generic identity and an ordinary function
-+returning impl Future. A mutation that hides the associated output is caught.
 diff --git a/docs/decisions/0318-lazy-cells.md b/docs/decisions/0318-lazy-cells.md
 index eebd0f8..defc7ba 100644
 --- a/docs/decisions/0318-lazy-cells.md
@@ -148,22 +125,6 @@ index da392f3..10d9e8a 100644
 +reads that payload for either variant; borrowing the Cow as itself gives
 +the Cow. Its AsRef does not turn borrowed data into owned data. See
 +[ADR 0319](../../decisions/0319-cows.md) and #1481.
-diff --git a/docs/guide/interop/async.md b/docs/guide/interop/async.md
-index 71b0ff6..bb84a81 100644
---- a/docs/guide/interop/async.md
-+++ b/docs/guide/interop/async.md
-@@ -162,6 +162,11 @@ The `js` crate has the rest of JS's `Promise`:
- | `p.then(f, g)` | `p.then_with(f, g)`: each gives a value or a promise, as `catch`'s does ([ADR 0782](../../decisions/0782-a-promises-executor-borrows-and-then-takes-two-handlers.md)) |
- | an `async` call handed on, not awaited | `js::promise(future)`: the future as the `Promise` it is |
- 
-+Exported async functions retain their resolved type in TypeScript declarations:
-+`async fn names() -> Vec<String>` is declared `names(): Promise<string[]>`.
-+An ordinary function returning `impl Future<Output = T>` likewise exposes
-+`Promise<T>`. A unit output is `Promise<void>`; generic payloads stay generic.
-+
- ## Rejections
- 
- `.await` of a rejected promise throws, as a panic does: the `async fn`'s
 diff --git a/docs/guide/interop/types.md b/docs/guide/interop/types.md
 index 1cef2a0..4619e15 100644
 --- a/docs/guide/interop/types.md
@@ -291,25 +252,6 @@ index ae6e267..ccd96c9 100644
    {
      name: "cell-option-unwritten",
      breaks:
-diff --git a/scripts/mutations/lower/declarations/parts.ts b/scripts/mutations/lower/declarations/parts.ts
-index f074183..d02e340 100644
---- a/scripts/mutations/lower/declarations/parts.ts
-+++ b/scripts/mutations/lower/declarations/parts.ts
-@@ -2,6 +2,14 @@
- import type { Mutation } from "../../../mutations";
- 
- export const mutations: Mutation[] = [
-+  {
-+    name: "opaque-future-output-ignored",
-+    breaks: "an async export loses its resolved payload and becomes any",
-+    file: "src/lower/declarations/parts.rs",
-+    find: ".find(|projection| tcx.is_lang_item(projection.def_id(), LangItem::FutureOutput))",
-+    replace: ".find(|_projection| false)",
-+    tests: ["test/declarations-async.test.ts"],
-+  },
-   {
-     name: "chain-keys-not-followed",
-     breaks: "a name shadowed down the chain, `className`, isn't omitted",
 diff --git a/scripts/mutations/lower/declarations/written.ts b/scripts/mutations/lower/declarations/written.ts
 index a62b218..417273e 100644
 --- a/scripts/mutations/lower/declarations/written.ts
@@ -330,7 +272,7 @@ index a62b218..417273e 100644
      name: "written-keyword-reference",
      breaks:
 diff --git a/scripts/mutations/lower/traits/dictionaries.ts b/scripts/mutations/lower/traits/dictionaries.ts
-index c10b4a5..e69893e 100644
+index e81cd3e..20ea6bb 100644
 --- a/scripts/mutations/lower/traits/dictionaries.ts
 +++ b/scripts/mutations/lower/traits/dictionaries.ts
 @@ -2,6 +2,26 @@
@@ -361,41 +303,10 @@ index c10b4a5..e69893e 100644
      name: "deque-a-generic-reader",
      breaks: "a `VecDeque<u8>` given to generic code as its reader is given `$dequeReader`, which has no `read` or `fill_buf`, where it's refused (#1302)",
 diff --git a/src/lower/declarations.rs b/src/lower/declarations.rs
-index acd441a..fbdcdf9 100644
+index 1e1c1b6..573fb6a 100644
 --- a/src/lower/declarations.rs
 +++ b/src/lower/declarations.rs
-@@ -38,7 +38,7 @@ use super::representation::{SignatureForms, held_ts as held};
- use classes::exported_class;
- use comments::documented;
- pub(in crate::lower) use comments::jsdoc_of;
--use parts::{flattened_keys, opaque_fn_signature};
-+use parts::{flattened_keys, opaque_fn_signature, opaque_future_output};
- 
- pub use written::validate_types;
- use written::{Member, Signature};
-@@ -1123,6 +1123,21 @@ impl<'tcx> Declarations<'_, 'tcx> {
-             {
-                 self.written(t, &declared, ty::List::empty())
-             }
-+            // An opaque Future is the JS promise its Output resolves to.
-+            ty::Alias(
-+                _,
-+                alias @ ty::AliasTy {
-+                    kind: ty::Opaque { .. },
-+                    ..
-+                },
-+            ) if let Some(output) = opaque_future_output(tcx, *alias) => {
-+                let payload = if output.is_unit() {
-+                    keyword("void")
-+                } else {
-+                    self.ts(output)
-+                };
-+                reference("Promise", vec![payload])
-+            }
-             // An `impl Fn(A) -> R` a function gives: the function it says, as
-             // a parameter's is, `cache`'s `(...args: unknown[]) => unknown`.
-             ty::Alias(
-@@ -1186,6 +1201,9 @@ impl<'tcx> Declarations<'_, 'tcx> {
+@@ -1203,6 +1203,9 @@ impl<'tcx> Declarations<'_, 'tcx> {
                  {
                      return reference("Set", vec![self.ts(args.type_at(0))]);
                  }
@@ -445,32 +356,8 @@ index 94e9bce..aeb192a 100644
      /// `Option<T>`'s `T` as written, where `written` is one, or a `Cell`'s or
      /// a `RefCell`'s of one, the `Option` a field's cell holds (rd414).
      pub(super) fn written_option<'h>(&self, written: &'h hir::Ty<'tcx>) -> Option<&'h hir::Ty<'tcx>> {
-diff --git a/src/lower/declarations/parts.rs b/src/lower/declarations/parts.rs
-index 5c93b19..f8be6db 100644
---- a/src/lower/declarations/parts.rs
-+++ b/src/lower/declarations/parts.rs
-@@ -35,6 +35,19 @@ pub(super) fn opaque_fn_signature<'tcx>(
-     Some((inputs?, output))
- }
- 
-+/// What an opaque Future resolves to, including an async function's result.
-+/// Read rustc's instantiated associated Output bound, as opaque_fn_signature
-+/// reads FnOnce::Output; never infer a payload from the generated JS.
-+pub(super) fn opaque_future_output<'tcx>(tcx: TyCtxt<'tcx>, alias: ty::AliasTy<'tcx>) -> Option<Ty<'tcx>> {
-+    let ty::Opaque { def_id } = alias.kind else { return None };
-+    tcx.explicit_item_bounds(def_id)
-+        .iter_instantiated_copied(tcx, alias.args)
-+        .filter_map(|bound| bound.skip_normalization().0.as_projection_clause())
-+        .map(|bound| bound.skip_binder())
-+        .find(|projection| tcx.is_lang_item(projection.def_id(), LangItem::FutureOutput))
-+        .and_then(|projection| projection.term.as_type())
-+}
-+
- /// The JS names of `ty`'s fields, a flattened struct's, or one's it
- /// refers to, and of those of the flattened struct in it (ADR 0205).
- pub(super) fn flattened_keys<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Vec<String> {
 diff --git a/src/lower/std_types/lazy.rs b/src/lower/std_types/lazy.rs
-index 2c4d30e..65aaff0 100644
+index ecf4bf0..2fcfbd4 100644
 --- a/src/lower/std_types/lazy.rs
 +++ b/src/lower/std_types/lazy.rs
 @@ -9,6 +9,28 @@ use crate::lower::temporary_names::Role;
@@ -515,13 +402,13 @@ index 2c4d30e..65aaff0 100644
              LazyOp::Get if self.boxed_payload(item) => self.some(Expr::held(lazy.clone())),
              _ => Expr::held(lazy.clone()),
          };
--        let made = Expr::bin(Op::Eq, Expr::member(lazy, "init"), Expr::undefined());
-+        let made = Expr::bin(Op::Eq, Expr::member(lazy, INITIALIZER), Expr::undefined());
-         Ok(Some(Expr::cond(made, given, Expr::undefined())))
+-        let made = Expr::bin(Op::Eq, Expr::member(lazy, "init"), Expr::js_undefined());
++        let made = Expr::bin(Op::Eq, Expr::member(lazy, INITIALIZER), Expr::js_undefined());
+         Ok(Some(Expr::cond(made, given, Expr::js_undefined())))
      }
  }
 diff --git a/src/lower/traits/dictionaries.rs b/src/lower/traits/dictionaries.rs
-index 8b9417e..6384762 100644
+index f7c8838..f91ecf0 100644
 --- a/src/lower/traits/dictionaries.rs
 +++ b/src/lower/traits/dictionaries.rs
 @@ -823,6 +823,30 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
@@ -725,64 +612,6 @@ index 0000000..e00d7b1
 +        println!("{} {}", path(value.clone()), borrowed_path(&value));
 +    }
 +}
-diff --git a/test/declarations-async.test.ts b/test/declarations-async.test.ts
-new file mode 100644
-index 0000000..bf7b96f
---- /dev/null
-+++ b/test/declarations-async.test.ts
-@@ -0,0 +1,52 @@
-+// Async exports expose their actual resolved payload to TypeScript callers.
-+import {expect,test} from "bun:test";
-+import {readFileSync,writeFileSync} from "node:fs";
-+import {join} from "node:path";
-+import {compiler,fixture,root,run} from "./support";
-+
-+test("async and opaque Future declarations preserve their promise payloads",async()=>{
-+  const dir=fixture("declarations-async");
-+  writeFileSync(join(dir,"lib.rs"),`pub async fn names() -> Vec<String> { vec!["first".to_string()] }
-+pub async fn count() -> u32 { 42 }
-+pub async fn done() {}
-+pub async fn echo<T>(value: T) -> T { value }
-+pub fn later() -> impl std::future::Future<Output = Vec<String>> { async { vec!["later".to_string()] } }
-+pub fn immediate() -> u32 { 7 }
-+`);
-+  run([compiler,"--declarations",join(dir,"lib.rs"),"-o",join(dir,"lib.js")]);
-+  const declaration=readFileSync(join(dir,"lib.d.ts"),"utf8");
-+  expect(declaration).toContain("export function names(): Promise<string[]>;");
-+  expect(declaration).toContain("export function count(): Promise<number>;");
-+  expect(declaration).toContain("export function done(): Promise<void>;");
-+  expect(declaration).toContain("export function echo<T>(value: T): Promise<T>;");
-+  expect(declaration).toContain("export function later(): Promise<string[]>;");
-+  expect(declaration).toContain("export function immediate(): number;");
-+  writeFileSync(join(dir,"use.ts"),`import {names,count,done,echo,later,immediate} from "./lib.js";
-+const n: Promise<string[]> = names();
-+const c: Promise<number> = count();
-+const d: Promise<void> = done();
-+const e: Promise<{name:string}> = echo({name:"hello"});
-+const l: Promise<string[]> = later();
-+const i: number = immediate();
-+// @ts-expect-error async payload is strings, never numbers
-+const badNames: Promise<number[]> = names();
-+// @ts-expect-error async results must be awaited
-+const badCount: number = count();
-+// @ts-expect-error generic async payload stays exact
-+const badEcho: Promise<number> = echo("text");
-+// @ts-expect-error opaque Future has a concrete payload too
-+const badLater: Promise<boolean> = later();
-+`);
-+  writeFileSync(join(dir,"tsconfig.json"),JSON.stringify({compilerOptions:{module:"esnext",moduleResolution:"bundler",strict:true,noEmit:true,skipLibCheck:false,typeRoots:[join(root,"node_modules/@types")]},files:["use.ts"]}));
-+  const checked=Bun.spawnSync([process.execPath,join(root,"node_modules/typescript/bin/tsc"),"-p",join(dir,"tsconfig.json")],{timeout:30000,stdout:"pipe",stderr:"pipe"});
-+  expect(checked.stdout.toString()+checked.stderr.toString()).toBe("");
-+  expect(checked.exitCode).toBe(0);
-+  const lib=await import(join(dir,"lib.js"));
-+  expect(await lib.names()).toEqual(["first"]);
-+  expect(await lib.count()).toBe(42);
-+  expect(await lib.done()).toBeUndefined();
-+  const object={name:"hello"};
-+  expect(await lib.echo(object)).toBe(object);
-+  expect(await lib.later()).toEqual(["later"]);
-+  expect(lib.immediate()).toBe(7);
-+});
 diff --git a/test/declarations-lazy.test.ts b/test/declarations-lazy.test.ts
 new file mode 100644
 index 0000000..d9abff9
