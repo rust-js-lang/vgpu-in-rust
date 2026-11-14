@@ -1,16 +1,19 @@
 # Downstream compiler fixes
 
 The gitlink is the authority for the compiler revision. Current published pin:
-`0fb07aed694681295a1f2132ee78fbf647f764ed` (fetched 2026-11-14).
+`ecb588210201077d00db0935274d49009a52e2ce` (fetched 2026-11-14).
 
-The single `0001-landing-boundary-fixes.patch` retains four outstanding fixes:
+The single `0001-landing-boundary-fixes.patch` retains six outstanding fixes:
 
 | Upstream issue | Change |
 | --- | --- |
-| [#1773](https://github.com/rust-js-lang/rust-js/issues/1773) | Native RangeError constructor preserves prototype identity, optional message/cause, and thrown values. |
 | [#1481](https://github.com/rust-js-lang/rust-js/issues/1481) | Cow AsRef/Borrow dictionaries consume the existing Cow dereference owner. |
 | [#1752](https://github.com/rust-js-lang/rust-js/issues/1752) | Lazy storage declarations use the representation owner's Pending/Ready schema. |
 | [#1763](https://github.com/rust-js-lang/rust-js/issues/1763) | React hook handles retain their types, with the correct React 18/19 mutable-ref alias. |
+
+| [#1775](https://github.com/rust-js-lang/rust-js/issues/1775) | Untagged From/Into preserve real Rust bodies and side effects; library bodies remain exported and pure wrappers are proved. |
+| [#1778](https://github.com/rust-js-lang/rust-js/issues/1778) | Nested derived Debug builder coercions are not mistaken for values passed to unrelated foreign writers. |
+| [#1779](https://github.com/rust-js-lang/rust-js/issues/1779) | Standard WebGPU flag namespaces use the existing WebIDL constant generator and native property reads. |
 
 Run `bun run patch:compiler` after initializing the submodule. An already-applied
 stack is proven by reversing a disposable copy; the actual checkout is never
@@ -28,3 +31,5 @@ remain in Git history; they are not applied on top of the new implementations.
 
 See `docs/validation.md` for scoped results and the upgrade's validation status.
 Interrupted broad checks are never counted as passing.
+
+Published `03da65f` now owns all six standard native Error subclasses (#1773). The old RangeError-only override and its standalone constructor test were removed; upstream class-identity tests pass unchanged.

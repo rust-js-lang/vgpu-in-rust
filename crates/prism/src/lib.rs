@@ -27,4 +27,8 @@ fn clamp(value: f64, low: f64, high: f64) -> f64 {
     number_min(high, number_max(low, value))
 }
 pub mod camera;
+pub mod controls;
+pub mod half;
 pub mod light_mesh;
+pub mod runtime;
+pub mod uniforms;

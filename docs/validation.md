@@ -1,103 +1,109 @@
 # Validation evidence
 
-Implementation is in progress. The complete landing page is not deployed.
-The compiler now uses published rust-js `0fb07aed694681295a1f2132ee78fbf647f764ed`,
-fetched on 2026-11-14. Its WebAPI promise and async declaration fixes and regressions are used unchanged.
-One reproducible downstream patch retains four outstanding fixes.
+The complete landing page is not deployed. These checks prove scene mathematics,
+React leaves and GPU building blocks; they do not prove a completed landing page.
 
-## Passing application checks
+## Current checkpoint
 
-- Twenty native Rust scene tests pass; the same twenty also pass after
-  compilation to JavaScript. The new camera checks cover orbit/centering, matrix identity, wall containment
-  and environment rotation.
-- Twenty-three app tests pass with over 149,000 assertions: optics, interaction, framing,
-  exact rounded mesh vertices/topology over fifteen shape/depth combinations,
-  exact camera Float32 storage/matrices and orbital basis over 90 configurations,
-  every spectral metadata record across high/low mesh layouts, exact Float32 light
-  vertices across thirteen optical configurations, clipping, integrated flux and
-  retained GPU upload/scratch identity, exact native metadata RangeErrors for
-  invalid fractional/nonfinite/negative/out-of-range indices,
-  exact React markup/context behavior, retained asset identity, and complete
-  compiler patch reproducibility. The audit rejects unrecorded compiler edits.
-- Fourteen production-built Chromium checks pass: ten compare Rust and upstream
-  setup tabs, covering copy/reset, rapid switches, layout stability, denied or
-  unavailable clipboard access, unmount cleanup and mobile reduced motion.
-  Four require an actual WebGPU adapter: all 44 retained prism shaders compile,
-  an invalid shader reports errors, and the Rust fullscreen pass copies exact
-  RGBA pixels without reversing the image. The additive spectral pass renders
-  the actual generated mesh with native vertex attributes and blend settings;
-  pixel readback detects red/blue output and verifies that a zero reveal aperture
-  removes all light.
-- Previously ported scene and UI modules regenerate without JavaScript changes.
-  The camera preserves shared view-projection identity and matches original
-  Float32 matrices exactly. A compensated norm removes the measured cancellation
-  mismatch from chained two-axis hypot calls. App compilation and rust-js-aware Clippy pass.
+The published rust-js gitlink is
+`ecb588210201077d00db0935274d49009a52e2ce` (2026-11-14). A single reproducible
+patch retains six outstanding fixes. No private compiler commit is the gitlink.
+The upstream nullable-promise, async-declaration, basic derived-Debug and native
+Error-family fixes are used unchanged.
 
-The WGSL graph is byte-identical to the original. The fullscreen vertex stage
-also matches its original shader literal exactly. Rust owns module creation,
-compilation diagnostics, pipeline creation and command encoding. The existing
-WGSL asset compiler resolves imports/reflection at build time. Upstream app
-TypeScript is imported only by isolated reference tests.
+Passing application checks:
 
-The light mesh core reuses a packed-number scratch buffer. Its web boundary owns
-the retained Float32Array and performs the original single bulk conversion;
-wrong-length targets throw the original native RangeError and exact message.
-Both Rust runtimes test topology ranges, finite vertices, scratch overwrite and
-wavelength-subdivision flux invariance.
+- 21 native Rust tests and the same 21 compiled JavaScript tests.
+- 34 app tests with more than 157,000 assertions: scene optics, framing,
+  interaction, exact rounded mesh vertices/topology, exact Float32 camera
+  matrices, spectral layouts/vertices/flux, retained upload identity, native
+  RangeErrors, React markup/context, retained assets and complete compiler-patch
+  reproducibility.
+- Runtime controls match the complete upstream default schema. Lamp interpolation,
+  portrait wall overscan and scene/glass uniform values match original functions
+  across themes, camera settings, mesh tiers, colors, reveal clamps and debug
+  gating. Projection, environment and plane arrays retain shared identities.
+- Reflected packing matches upstream bytes for the actual Scene/Glass WGSL
+  structs, scalar/vector/matrix padding, nested arrays and binary16 rounding.
+  Invalid input preserves diagnostic payloads; changing getters preserve
+  validation/write order, coercion and native exceptions. Rust callers receive
+  structured Result errors; a complete JavaScript SDK error-class port is not
+  claimed.
+- Invalid uniform values allocate no GPU resource. Rejected updates preserve the
+  previous upload, and valid updates retain the same buffer.
+- 15 production-built Chromium checks. Ten cover setup-tab parity, copy/reset,
+  rapid transitions, layout stability, unavailable/denied clipboard, reduced
+  motion, mobile sizing and unmount cleanup. Five require a real WebGPU adapter:
+  all 44 retained shaders compile; malformed shader diagnostics work; the Rust
+  fullscreen pass copies exact pixels/orientation; the additive light pass
+  renders red/blue spectral output and disappears with zero reveal; both glass
+  interface pipelines compile for single-sample and 4x MSAA targets. Glass
+  pipeline compilation does not yet prove full glass composition.
+- Native core Clippy and the rust-js-aware web Clippy pass. Existing generated
+  modules remain unchanged apart from newly added exports and functionality.
 
-These checks prove components and GPU building blocks. The complete prism scene graph,
-complete landing root and full-page visual comparison remain unfinished.
+WGSL/assets remain byte-identical to upstream. Rust owns module diagnostics,
+pipelines, command encoding, uniform values, reflected packing and uniform/vertex
+buffer allocation/upload. The existing WGSL asset compiler owns shader imports
+and reflection at build time. Upstream app TypeScript is used only by isolated
+reference tests.
 
-## Current compiler patch
+## Retained compiler fixes
 
-- #1773: native RangeError constructor uses the existing Error binding convention.
-  Constructor/options/declaration/throwing checks pass, and replacing it with base
-  Error is caught on native class identity. All sixteen constructor tests and the
-  three builtins coverage checks pass (723/723 covered members).
-- #1481: Cow AsRef/Borrow uses the existing dereference owner. Its corpus case
-  matches native Rust on the updated compiler, including strings, slices,
-  arrays, paths and both variants. Two dictionary mutations were previously caught.
-- #1752: lazy storage declarations share the Pending/Ready representation schema.
-  Strict declaration/runtime-state tests pass; both declaration mutations were caught.
-- #1763: React hook handles retain exact payloads and runtime identity. Both the
-  React 18 mutable-ref alias and React 19 canonical ref tests pass; the metadata
-  reader mutation was caught.
+- #1481: Cow AsRef/Borrow dictionaries use the Cow dereference owner. Native
+  corpus comparisons cover strings, slices, arrays, paths and both variants.
+- #1752: LazyCell/LazyLock declarations use the Pending/Ready storage schema.
+  Strict declaration and runtime-state checks pass.
+- #1763: React hook handles preserve payload types and React 18/19 ref aliases.
+  An upstream replacement is available; it will be adopted at a grouped upgrade.
+- #1775: arbitrary untagged From/Into bodies preserve their Rust behavior and
+  side effects. Library bodies remain exported with private state owned there;
+  pure wrappers are proved rather than assumed. Nine existing React/Next
+  boundary wrappers explicitly use the established identity contract. Standard
+  trait resolution lives in recognition; the untagged owner classifies bodies.
+- #1778: nested derived Debug field coercions stay inside their builder, rather
+  than being treated as values passed to unrelated foreign writers. Actual
+  framed-writer propagation retains its existing path.
+- #1779: WebIDL supplies the standard GPU flag namespaces, numeric types and
+  native property reads. The import regression failed before the fix and passes
+  afterward. Three isolated generator probes remove namespace selection, member
+  retention and constant emission independently; each loses the required module.
+  These probes are retained in test/webapi-gpu.test.ts, not falsely represented
+  as runs of the compiler mutation harness.
 
+Eight conversion/Debug/dispatch/reachability mutations are caught on the corrected
+stack. This includes five new or retargeted semantic probes and three existing
+sites updated after the refactor. The direct-From live-borrow test catches the
+pure-effects mutation; its earlier Into form survived and is not counted as
+proof of that analysis path. Four native/library conversion probes still pass.
+Upstream's standard Error class-identity test also passes unchanged; the old
+RangeError-only override has been removed.
 
-The earlier focused run passed five tests: upstream's nullable-promise
-and async declaration regressions plus three retained cases in two downstream files.
-A clean application of the combined patch matches every private compiler edit.
+## Broad compiler gate
 
-Upstream now owns the old Cow declaration, metamorphic partition, Cargo-input,
-memory-fixture and pool fixes, the WebAPI promise fix (#1768), and async declaration payloads (#1769). Their old
-patches and promise mutation helper are removed. See patches/rust-js/README.md
-for the published commits. No private compiler commit is used as the gitlink.
+The ecb5882 `check:fast --all` run completed in 709 seconds with seven failed test
+files: Next integration, three JSX files, architecture, mutation inventory and
+CI mutation-site validation. All fourteen corpus parts, added mutations,
+compiler Clippy, native unit tests, formatting, the Vite example, crate corpus
+and reported matrix/sample stages completed. This was a failed gate, not a
+passing suite or a timeout.
 
-## Broad compiler gates
+After correcting binding contracts, ownership and stale mutation sites, all
+seven failed files pass in focused reruns: 212 tests, including Next build,
+compile, dev refresh and error recovery. The four native/library conversion
+probes and all eight affected mutations also pass. A complete passing broad
+rerun remains unproven; focused reruns are not represented as that result.
 
-No interrupted or failing attempt is counted as passing. Against the old
-0f641c2 pin, initial runs found a serial metamorphic tail, an order-dependent
-Cargo assertion, a slow memory fixture, a lazy-schema architecture issue and
-pool accounting/admission defects. Fixes received focused evidence. One run
-finished in 546 seconds with an architecture failure later corrected; other
-runs reached their enforced 720-second limits without a final suite result.
-
-The last monitored old-pin run passed all fourteen corpus parts and its reported
-mutation/format/Clippy stages. It also exposed a child-test startup assumption:
-the 100 ms deadline could expire before the fixture wrote its PID, then the test
-read the missing file. A bounded delayed-start probe independently reproduced
-that condition; it is reported as #1770. The run was stopped with exit 143 at the
-user's request to upgrade, before an overall result. Upstream's newer machine
-leases, pool backfilling and bounded footprint sampling supersede the old local
-validation-loop patches. A later monitored run on b0bc0a3 was also stopped with exit 143 when the user
-requested the published async declaration fix. Completed stages are retained as
-scoped evidence; no overall passing result is claimed. A full passing gate on
-the current pin remains unproven.
+Earlier pins had interrupted or timed-out broad runs, and one 546-second run
+reported an architecture failure later corrected. None is counted as passing.
+The old child-startup race was reported as #1770 and is now fixed upstream.
 
 ## Remaining milestone gates
 
-Finish and render the actual prism scene and every landing section. Exercise
-real full-page GPU output, light/dark themes, desktop/mobile framing, interaction,
-fallback and lifecycle against upstream. Publish the source, configure a
-build/deploy-only Pages workflow with pinned current actions, and verify the
-actual public page. Keep the milestone open until all of these are proven.
+Finish the real prism scene graph, including environment baking, bloom,
+light/dark composition, quality policy and resource lifecycle. Finish the full
+landing root and every section. Compare full-page GPU output, themes,
+desktop/mobile framing, interaction, fallback and cleanup against upstream.
+Obtain the remaining broad compiler evidence. Publish the source, enable
+workflow-based Pages, install a build/deploy-only workflow with current actions
+pinned to full commits, and verify the actual public page with visual evidence.

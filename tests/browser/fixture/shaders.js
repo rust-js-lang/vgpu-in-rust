@@ -8,3 +8,17 @@ import {lightPipeline,encodeLight} from '../../../crates/web/src/spectral_pass.j
 import {buildLightMesh} from '../../../crates/web/src/light_mesh.js';
 import {lampForIncidence,STYLIZED_DISPERSION} from '../../../crates/prism/src/types.js';
 Object.assign(window.shaderFixture,{lightPipeline,encodeLight,buildLightMesh,lampForIncidence,STYLIZED_DISPERSION});
+
+import {tryPack} from '../../../crates/web/src/packing.js';
+Object.assign(window.shaderFixture,{tryPack});
+
+import {sceneUniforms,glassUniforms} from '../../../crates/prism/src/uniforms.js';
+import {defaultPrismControls} from '../../../crates/prism/src/controls.js';
+import {lightMeshLayout} from '../../../crates/prism/src/light_mesh.js';
+Object.assign(window.shaderFixture,{sceneUniforms,glassUniforms,defaultPrismControls,lightMeshLayout});
+
+import {createUniformBuffer,writeUniformBuffer,createVertexBuffer} from '../../../crates/web/src/buffers.js';
+Object.assign(window.shaderFixture,{createUniformBuffer,writeUniformBuffer,createVertexBuffer});
+
+import {glassPipeline,encodeGlass} from '../../../crates/web/src/glass_pass.js';
+Object.assign(window.shaderFixture,{glassPipeline,encodeGlass});

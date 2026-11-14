@@ -98,32 +98,25 @@ test('Rust additive light pass rasterizes the generated spectral mesh and obeys 
     const layout=shader.reflection.bindings.find((binding:any)=>binding.group===0&&binding.binding===0).layout;
     const light=fixture.lampForIncidence(60,0.025,0.5);
     const mesh=fixture.buildLightMesh({light,dispersion:fixture.STYLIZED_DISPERSION,wallHalfExtent:[2.8,1.6],samples:64,beamSlices:12});
-    const vertices=device.createBuffer({size:mesh.vertices.byteLength,usage:GPUBufferUsage.VERTEX|GPUBufferUsage.COPY_DST});
-    const uniforms=device.createBuffer({size:layout.size,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+    const controls=fixture.defaultPrismControls();
+    controls.view='caustic';
+    const view={viewProjection:[0.5,0,0,0, 0,0.8,0,0, 0,0,0,0, 0,0,0.5,1]};
+    const values=fixture.sceneUniforms(view,[2.8,1.6],light,controls,fixture.lightMeshLayout(64,12),1);
+    const allocated=fixture.createUniformBuffer(device,layout,values,'spectral-test.uniforms');
+    if(allocated.TAG==='Err')throw Error(allocated._0.message);
+    const uniformResource=allocated._0;
+    const uniforms=uniformResource.buffer;
+    const vertices=fixture.createVertexBuffer(device,mesh.vertices,'spectral-test.vertices');
     const output=device.createTexture({size:[256,128],format:'rgba8unorm',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
     const readback=device.createBuffer({size:256*128*4,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
     try{
       device.pushErrorScope('validation');
       const pipeline=await fixture.lightPipeline(device,shader,'rgba8unorm','spectral-test');
       const bindings=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:uniforms}}]});
-      device.queue.writeBuffer(vertices,0,mesh.vertices);
-      // Test-only reflected data packing; application uniform ownership is ported separately.
-      const values:Record<string,number|number[]>={viewProjection:[0.5,0,0,0, 0,0.8,0,0, 0,0,0,0, 0,0,0.5,1],wallHalfExtent:[2.8,1.6],inputBeamDirection:light.direction,wallColor:[0,0,0],causticOnly:1,lightPlaneZ:0,lightWhiteQuads:12,lightBeamSlices:12,lightSpectralSamples:64,lightInternalQuads:64*12*4,lightInternalSegments:4,lightOpacity:1,lightEdgeFalloff:16,rainbowFalloffRate:3.8,rainbowFalloffPower:3.7,beamWidthReveal:1};
-      const bytes=new ArrayBuffer(layout.size),view=new DataView(bytes);
+      // Values, allocation, validation and retained uploads all run in Rust.
       function pack(){
-        for(const member of layout.members){
-          const value=values[member.name];
-          if(value===undefined)throw Error('Missing test uniform '+member.name);
-          if(Array.isArray(value)){
-            const type=member.layout.type;
-            value.forEach((component,index)=>{
-              const offset=type.kind==='matrix'?Math.floor(index/type.rows)*member.layout.stride+(index%type.rows)*4:index*4;
-              view.setFloat32(member.offset+offset,component,true);
-            });
-          }else if(member.type.name==='u32')view.setUint32(member.offset,value,true);
-          else view.setFloat32(member.offset,value,true);
-        }
-        device.queue.writeBuffer(uniforms,0,bytes);
+        const result=fixture.writeUniformBuffer(uniformResource,device.queue,values);
+        if(result.TAG==='Err')throw Error(result._0.message);
       }
       async function frame(){
         pack();
@@ -157,4 +150,26 @@ test('Rust additive light pass rasterizes the generated spectral mesh and obeys 
   expect(report.visible.blue).toBeGreaterThan(0);
   expect(report.visible.maximum).toBeGreaterThan(50);
   expect(report.hidden.lit).toBe(0);
+});
+
+
+test('Rust glass interfaces compile against native mesh attributes in single-sample and 4x MSAA targets',async({page})=>{
+  await page.goto('/shaders.html');
+  await expect.poll(()=>page.evaluate(()=>Boolean(Reflect.get(window,'shaderFixture')))).toBe(true);
+  const report=await page.evaluate(async()=>{
+    const adapter=await navigator.gpu.requestAdapter();
+    if(!adapter)throw Error('A real WebGPU adapter is required');
+    const device=await adapter.requestDevice();
+    const fixture=Reflect.get(window,'shaderFixture');
+    try{
+      device.pushErrorScope('validation');
+      for(const back of [false,true])for(const samples of [1,4]){
+        const suffix=back?'/shared/glass/glass-back.wgsl':'/shared/glass/glass.wgsl';
+        const shader=Object.entries(fixture.sources).find(([name])=>name.endsWith(suffix))![1];
+        await fixture.glassPipeline(device,shader,'rgba16float',back,samples,'glass-test');
+      }
+      return (await device.popErrorScope())?.message??null;
+    }finally{device.destroy();}
+  });
+  expect(report).toBeNull();
 });

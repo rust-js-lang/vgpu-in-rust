@@ -11,6 +11,11 @@ use react::webapi::{GPUDevice, GPUShaderModule, GPUShaderModuleDescriptor};
 pub struct ShaderSource(PhantomData<JsObject>);
 
 impl ShaderSource {
+    #[cfg_attr(rust_js, rust_js::link_name = "get reflection")]
+    pub fn reflection(&self) -> &'static crate::reflection::ShaderReflection {
+        unreachable!()
+    }
+
     #[cfg_attr(rust_js, rust_js::link_name = "get wgsl")]
     pub fn wgsl(&self) -> String {
         unreachable!()
