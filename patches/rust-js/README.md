@@ -1,35 +1,21 @@
-# Downstream compiler fixes
+# Compiler gap history
 
-The gitlink is the authority for the compiler revision. Current published pin:
-`ecb588210201077d00db0935274d49009a52e2ce` (fetched 2026-11-14).
+Current published compiler pin: `27e3f76eceecd50d3b2d839ecc8b22f3842a926c`.
 
-The single `0001-landing-boundary-fixes.patch` retains six outstanding fixes:
+All six previous downstream fixes are upstream-owned. No local compiler patch
+is applied. The submodule checkout is clean; setup and compile use the published
+compiler directly. Historical patches remain in this repository's Git history.
 
-| Upstream issue | Change |
+| Issue | Published implementation |
 | --- | --- |
-| [#1481](https://github.com/rust-js-lang/rust-js/issues/1481) | Cow AsRef/Borrow dictionaries consume the existing Cow dereference owner. |
-| [#1752](https://github.com/rust-js-lang/rust-js/issues/1752) | Lazy storage declarations use the representation owner's Pending/Ready schema. |
-| [#1763](https://github.com/rust-js-lang/rust-js/issues/1763) | React hook handles retain their types, with the correct React 18/19 mutable-ref alias. |
+| #1481 Cow AsRef/Borrow | `91c41cd9a` |
+| #1752 opaque LazyCell/LazyLock declarations | `6aa792201` |
+| #1763 React hook handle declarations | `07d97ef66` |
+| #1775 untagged conversion bodies | `a02f938b0` |
+| #1778 nested derived Debug | `75abfed4b` |
+| #1779 WebGPU flag namespaces | `7d1c48f3c` |
 
-| [#1775](https://github.com/rust-js-lang/rust-js/issues/1775) | Untagged From/Into preserve real Rust bodies and side effects; library bodies remain exported and pure wrappers are proved. |
-| [#1778](https://github.com/rust-js-lang/rust-js/issues/1778) | Nested derived Debug builder coercions are not mistaken for values passed to unrelated foreign writers. |
-| [#1779](https://github.com/rust-js-lang/rust-js/issues/1779) | Standard WebGPU flag namespaces use the existing WebIDL constant generator and native property reads. |
-
-Run `bun run patch:compiler` after initializing the submodule. An already-applied
-stack is proven by reversing a disposable copy; the actual checkout is never
-reversed. A conflicting edit or wrong revision is rejected. Keep the gitlink at
-a published commit; the checkout remains intentionally dirty after patching.
-
-The upgrade removed the old Cow declaration, metamorphic partition, Cargo-input,
-memory-fixture and validation-pool patches. Upstream now owns those fixes:
-`6609623`, `4ea9947`, `4db5a47`, `c53afcd`, `bb0bdee`, and `ddead01`.
-The last also adds shared machine leases and stale-owner-safe locks.
-Upstream `b0bc0a3` now owns the nullable WebAPI promise fix (#1768), its
-generator changes and regression. Upstream `0fb07ae` also owns async/opaque
-Future declaration payloads (#1769). Neither fix has a downstream override. Old patches
-remain in Git history; they are not applied on top of the new implementations.
-
-See `docs/validation.md` for scoped results and the upgrade's validation status.
-Interrupted broad checks are never counted as passing.
-
-Published `03da65f` now owns all six standard native Error subclasses (#1773). The old RangeError-only override and its standalone constructor test were removed; upstream class-identity tests pass unchanged.
+The earlier native Error-family, nullable-promise and async-declaration fixes
+also remain upstream-owned. Future compiler gaps still follow AGENTS.md:
+reproduce, file an issue, patch the private submodule, retain the patch here,
+and adopt the upstream replacement when available.

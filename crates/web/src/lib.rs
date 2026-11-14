@@ -15,3 +15,5 @@ pub mod shader;
 pub mod spectral_pass;
 pub mod targets;
 pub mod wordmark;
+
+pub mod postprocess;

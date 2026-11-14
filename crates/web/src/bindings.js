@@ -7,6 +7,19 @@
 import { createPackedUniformBuffer, writeUniformBuffer } from "./buffers.js";
 import { packingErrorDebug_fmt, tryPack } from "./packing.js";
 
+export const UniformInput = {
+  /**
+   * Shader reflection accepts heterogeneous parameter records. Erase only
+   * here, retaining Rust types everywhere that creates those records.
+   */
+  new(name, value) {
+    return {
+      name,
+      value,
+    };
+  },
+};
+
 /**
  * Pack every input before allocating GPU buffers, so a later invalid block
  * cannot leak the buffers already allocated for an earlier block.
@@ -119,6 +132,9 @@ export const ShaderBindings = {
     return result$1.TAG === "Err"
       ? { TAG: "Err", _0: packingErrorDebug_fmt(result$1._0) }
       : result$1;
+  },
+  writeValue(shaderBindings, queue, name, value) {
+    return ShaderBindings.write(shaderBindings, queue, name, value);
   },
   destroy(shaderBindings) {
     for (const uniform of shaderBindings.uniforms) {

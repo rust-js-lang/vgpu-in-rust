@@ -10,6 +10,10 @@ export interface UniformInput {
     value?: unknown;
 }
 
+export const UniformInput: {
+    "new"<T>(name: string, value: T): UniformInput;
+};
+
 export interface NamedResource {
     name: string;
     resource: GPUBindingResource;
@@ -29,6 +33,7 @@ export interface ShaderBindings {
 export const ShaderBindings: {
     bind(shaderBindings: ShaderBindings, device: GPUDevice, pipeline: GPURenderPipeline, resources: NamedResource[], label: string): any;
     write(shaderBindings: ShaderBindings, queue: GPUQueue, name: string, value?: unknown | null | undefined): any;
+    writeValue<T>(shaderBindings: ShaderBindings, queue: GPUQueue, name: string, value: T): any;
     destroy(shaderBindings: ShaderBindings): void;
 };
 

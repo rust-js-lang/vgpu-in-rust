@@ -7,3 +7,6 @@ export {frame} from '@reference-api/frame.ts';
 export {target} from '@reference-api/target-offscreen.ts';
 export {prismGeometry} from '@reference/app/[lang]/(home)/components/prism-background/scene/prism-mesh.ts';
 export {buildLightMesh} from '@reference/app/[lang]/(home)/components/prism-background/scene/light-mesh.ts';
+
+export {bloomBlurUniforms} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/dark/passes/bloom/uniforms.ts';
+export {bloomSpread} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/dark/passes/bloom/config.ts';

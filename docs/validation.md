@@ -6,19 +6,19 @@ React leaves and GPU building blocks; they do not prove a completed landing page
 ## Current checkpoint
 
 The published rust-js gitlink is
-`ecb588210201077d00db0935274d49009a52e2ce` (2026-11-14). A single reproducible
-patch retains six outstanding fixes. No private compiler commit is the gitlink.
+`27e3f76eceecd50d3b2d839ecc8b22f3842a926c` (2026-11-14). All retained compiler patches are now
+replaced by published upstream implementations. No private compiler commit is the gitlink.
 The upstream nullable-promise, async-declaration, basic derived-Debug and native
 Error-family fixes are used unchanged.
 
 Passing application checks:
 
-- 21 native Rust tests and the same 21 compiled JavaScript tests.
-- 36 app tests with more than 157,000 assertions: scene optics, framing,
+- 24 native Rust tests and the same 24 compiled JavaScript tests.
+- 38 app tests with 157,800 assertions: scene optics, framing,
   interaction, exact rounded mesh vertices/topology, exact Float32 camera
   matrices, spectral layouts/vertices/flux, retained upload identity, native
-  RangeErrors, React markup/context, retained assets and complete compiler-patch
-  reproducibility.
+  RangeErrors, React markup/context, retained assets, bloom kernels/pairing and
+  theme/intro reveal timing.
 - Runtime controls match the complete upstream default schema. Lamp interpolation,
   portrait wall overscan and scene/glass uniform values match original functions
   across themes, camera settings, mesh tiers, colors, reveal clamps and debug
@@ -31,15 +31,18 @@ Passing application checks:
   claimed.
 - Invalid uniform values allocate no GPU resource. Rejected updates preserve the
   previous upload, and valid updates retain the same buffer.
-- 18 production-built Chromium checks. Ten cover setup-tab parity, copy/reset,
+- 23 production-built Chromium checks. Ten cover setup-tab parity, copy/reset,
   rapid transitions, layout stability, unavailable/denied clipboard, reduced
-  motion, mobile sizing and unmount cleanup. Eight require a real WebGPU adapter:
+  motion, mobile sizing and unmount cleanup. Thirteen require a real WebGPU adapter:
   all 44 retained shaders compile; malformed shader diagnostics work; the Rust
   fullscreen pass copies exact pixels/orientation; the additive light pass
   renders red/blue spectral output and disappears with zero reveal; both glass
   interface pipelines compile for single-sample and 4x MSAA targets. Connected composition is now also checked, as detailed below.
-- Native core Clippy and the rust-js-aware web Clippy pass. Existing generated
-  modules remain unchanged apart from newly added exports and functionality.
+- Native core Clippy previously passed. The rust-js-aware Clippy command exits
+  successfully, but the new generic parameter-erasure boundary exposes four
+  false-positive dead-code warnings; the isolated failing regression is filed
+  as #1784. No suppression or visibility workaround is applied. LazyLock type
+  declarations now use the published opaque @rust-js/std type.
 
 WGSL/assets remain byte-identical to upstream. Rust owns module diagnostics,
 pipelines, command encoding, uniform values, reflected packing and uniform/vertex
@@ -47,14 +50,14 @@ buffer allocation/upload. The existing WGSL asset compiler owns shader imports
 and reflection at build time. Upstream app TypeScript is used only by isolated
 reference tests.
 
-## Retained compiler fixes
+## Earlier compiler checkpoint (ecb5882)
 
 - #1481: Cow AsRef/Borrow dictionaries use the Cow dereference owner. Native
   corpus comparisons cover strings, slices, arrays, paths and both variants.
 - #1752: LazyCell/LazyLock declarations use the Pending/Ready storage schema.
   Strict declaration and runtime-state checks pass.
 - #1763: React hook handles preserve payload types and React 18/19 ref aliases.
-  An upstream replacement is available; it will be adopted at a grouped upgrade.
+  Its published replacement is now adopted without a local override.
 - #1775: arbitrary untagged From/Into bodies preserve their Rust behavior and
   side effects. Library bodies remain exported with private state owned there;
   pure wrappers are proved rather than assumed. Nine existing React/Next
@@ -139,3 +142,54 @@ This remains a renderer checkpoint. Bloom, final presentation/particles, light
 mode, full lifecycle/interaction integration, the complete landing page and
 public Pages deployment are still required. The older broad compiler gate
 status above is unchanged.
+
+## Published compiler upgrade (78d92a7)
+
+Five local fixes are retired in favor of published implementations: #1481 at
+91c41cd9a, #1752 at 6aa792201, #1763 at 07d97ef66, #1775 at a02f938b0 and
+#1778 at 75abfed4b. Their old lowering, schema, binding-identity annotations,
+regressions and mutation overrides are removed from the downstream stack.
+Only #1779 remains. The preserved older results describe the earlier checkpoint
+and are not a claim that a broad gate has passed on this new pin. Application regeneration, 36 app tests, 18 browser tests, compiled core tests
+and four focused declarations/WebGPU regressions passed on 78d92a7.
+
+## Published WebGPU namespace fix
+
+Claude relayed the published #1779 fix, 7d1c48f3c, through the local agent hub.
+Adopted latest published main `27e3f76eceecd50d3b2d839ecc8b22f3842a926c`, including that fix. The final patch,
+patch-application script and obsolete patch-only regression are retired. The
+private compiler checkout is clean. Regeneration, all 38 app tests, all 23
+production browser tests and 24 compiled core tests pass on this published pin.
+
+## Bloom and retained presentation checkpoint
+
+The Rust dark postprocess graph now performs threshold extraction, all four
+Gaussian pyramid levels, exact raw/bilinear-paired axis selection, the dedicated
+particle-light area downsample, near/far scale composition, ACES/sRGB presentation
+and cached display reveal. Low quality preserves its two-level layout and 0.15
+bloom strength. Device-enabled packed storage selects rg11b10ufloat for visible
+levels only; rgba16float remains the fallback and particle-light format.
+
+Four browser comparisons cover high/low quality with the packed feature enabled
+when supported and with it deliberately disabled. Every intermediate horizontal
+and vertical target, retained presentation and final display has zero differing
+Float32 readback channels compared with actual upstream effects and independent
+upstream uniform functions. The input includes a narrow HDR ray and gradients;
+nonzero/finite assertions prevent blank-output false positives. Reveal values
+0, 0.25 and 1 match while the cached presentation texture retains identity.
+
+A fifth browser test rejects the fourth native pipeline promise during graph
+construction and verifies all partially created textures and uniform buffers are
+destroyed exactly once. The renderer catches native rejection and returns the
+error while preserving Rust's Result API. Shader inputs cross one generic
+type-erasure boundary; core math remains independent of JS bindings.
+
+Outstanding compiler diagnostic: [#1784](https://github.com/rust-js-lang/rust-js/issues/1784)
+is a minimal confirmed false-positive field-liveness warning through generic
+js::any_of. It is also sent to Claude through agent-hub for upstream support.
+Current JavaScript and GPU behavior are correct; strict -D warnings fails this
+probe. The new code has no allow attribute or source workaround.
+
+Particles, light-theme rendering, runtime/lifecycle integration, the full page
+and public deployment remain required. The broad compiler gate history above
+is not replaced by a claim that the complete gate passed on this pin.

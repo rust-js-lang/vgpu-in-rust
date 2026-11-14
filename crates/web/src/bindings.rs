@@ -13,6 +13,16 @@ pub struct UniformInput<'a> {
     pub name: &'a str,
     pub value: Option<&'a Unknown>,
 }
+impl<'a> UniformInput<'a> {
+    /// Shader reflection accepts heterogeneous parameter records. Erase only
+    /// here, retaining Rust types everywhere that creates those records.
+    pub fn new<T: 'static>(name: &'a str, value: T) -> Self {
+        Self {
+            name,
+            value: js::any_of(value),
+        }
+    }
+}
 pub struct NamedResource<'a> {
     pub name: &'a str,
     pub resource: GPUBindingResource<'a>,
@@ -141,6 +151,14 @@ impl ShaderBindings {
             .find(|uniform| uniform.name == name)
             .ok_or_else(|| format!("Unknown uniform '{name}'."))?;
         write_uniform_buffer(&uniform.resource, queue, value).map_err(|error| format!("{error:?}"))
+    }
+    pub fn write_value<T: 'static>(
+        &self,
+        queue: &GPUQueue,
+        name: &str,
+        value: T,
+    ) -> Result<(), String> {
+        self.write(queue, name, js::any_of(value))
     }
     pub fn destroy(&self) {
         for uniform in &self.uniforms {

@@ -36,3 +36,6 @@ Object.assign(window.shaderFixture,{createPrismGeometry,PrismBuffers,cameraView}
 
 import {wallExtent} from '../../../crates/prism/src/runtime.js';
 Object.assign(window.shaderFixture,{wallExtent});
+
+import {createDarkPostprocess,DarkPostprocess} from '../../../crates/web/src/postprocess.js';
+Object.assign(window.shaderFixture,{createDarkPostprocess,DarkPostprocess});
