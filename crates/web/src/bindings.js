@@ -6,6 +6,7 @@
  */
 import { createPackedUniformBuffer, writeUniformBuffer } from "./buffers.js";
 import { packingErrorDebug_fmt, tryPack } from "./packing.js";
+import { $catchable } from "@rust-js/std";
 
 export const UniformInput = {
   /**
@@ -150,9 +151,18 @@ export const BoundPipeline = {
       return result;
     }
     const values = result._0;
-    const bind = ShaderBindings.bind(values, device, pipeline, resources, label);
-    if (bind.TAG === "Ok") {
-      const group = bind._0;
+    // A native API can throw after uniform allocation. Keep cleanup at the
+    // binding owner so every graph has the same exception guarantee.
+    let bound;
+    try {
+      bound = ShaderBindings.bind(values, device, pipeline, resources, label);
+    } catch (error) {
+      $catchable(error);
+      ShaderBindings.destroy(values);
+      throw error;
+    }
+    if (bound.TAG === "Ok") {
+      const group = bound._0;
       return {
         TAG: "Ok",
         _0: {
@@ -162,7 +172,7 @@ export const BoundPipeline = {
         },
       };
     }
-    const error = bind._0;
+    const error = bound._0;
     ShaderBindings.destroy(values);
     return { TAG: "Err", _0: error };
   },

@@ -6,8 +6,9 @@ React leaves and GPU building blocks; they do not prove a completed landing page
 ## Current checkpoint
 
 The published rust-js gitlink is
-`59b8850fffaee6c9eb33b56753f5646d50d4df47` (2026-11-14), including the published
-#1784 field-liveness fix. One reproducible downstream patch for #1785 remains;
+`c4aa4e5d54028aa834b0892838e22d3cb7bf5649` (2026-11-14), including the published
+#1784 field-liveness and #1785 function-pointer cast fixes. One minimal downstream
+patch for the neighboring #1786 classification bug remains;
 see patches/rust-js. No private compiler commit is the gitlink.
 The upstream nullable-promise, async-declaration, basic derived-Debug and native
 Error-family fixes are used unchanged.
@@ -32,9 +33,9 @@ Passing application checks:
   claimed.
 - Invalid uniform values allocate no GPU resource. Rejected updates preserve the
   previous upload, and valid updates retain the same buffer.
-- 44 production-built Chromium checks. Ten cover setup-tab parity, copy/reset,
+- 51 production-built Chromium checks. Ten cover setup-tab parity, copy/reset,
   rapid transitions, layout stability, unavailable/denied clipboard, reduced
-  motion, mobile sizing and unmount cleanup. Thirty-four require a real WebGPU adapter:
+  motion, mobile sizing and unmount cleanup. Forty-one require a real WebGPU adapter:
   all 44 retained shaders compile; malformed shader diagnostics work; the Rust
   fullscreen pass copies exact pixels/orientation; the additive light pass
   renders red/blue spectral output and disappears with zero reveal; both glass
@@ -102,8 +103,8 @@ The old child-startup race was reported as #1770 and is now fixed upstream.
 
 ## Remaining milestone gates
 
-Finish the light scene graph, quality policy and canvas resource lifecycle.
-The assembled dark scene and its bloom/presentation are already GPU-verified. Finish the full
+Finish quality policy and canvas resource lifecycle. Both assembled scene graphs
+are already GPU-verified. Finish the full
 landing root and every section. Compare full-page GPU output, themes,
 desktop/mobile framing, interaction, fallback and cleanup against upstream.
 Obtain the remaining broad compiler evidence. Publish the source, enable
@@ -314,3 +315,49 @@ The current app checkpoint passes 48 app tests (161,395 assertions), 44 Chromium
 checks and 28 native/compiled core tests. The light graph assembly, canvas/frame
 loop, React lifecycle, complete landing content and public Pages deployment
 still remain. The project is not yet a deployed landing page.
+
+## Connected light graph and published cast fix
+
+The complete light graph now owns its retained HDR backdrop and MSAA scene,
+wall/material sampling, u32 cast-shadow draw, projected caustics, back/front
+physical glass, front accent and direct display presentation. A native render
+bundle preserves the source order: wall, shadow, white/outgoing caustics, back
+glass, internal caustics. The source's alternate views and debug light mesh
+ordering are preserved, including the complete light wireframe in wall view.
+
+Four full-pipeline tests compare actual createLightPipeline against Rust for
+high/low quality and 1x/4x scene samples. Every byte of backdrop, scene and final
+output matches through all views, cached reveal frames, portrait resize, every
+view/wireframe combination and all four tone mappings. The 1x test explicitly
+sets the original SDK wrapper's compatibility flag; it tests that target layout
+on a real WebGPU device, not a claim that this device is a compatibility adapter.
+After resize the reference receives its canvas lifecycle's required scene-refresh
+request; Rust invalidates its cached scene internally and is given a cached-frame
+request to prove that invalidation. Pipelines, uniform buffers and the stable
+backdrop bundle retain identity across resize; no pipeline compiles during it.
+
+Three failure tests inject native pipeline, bind-group and environment failures.
+An environment failure waits for a deliberately held compilation branch before
+rollback. All owned textures and buffers are destroyed exactly once, and retry
+reuses the shared environment. The bind-group test first exposed a leaked
+presentation uniform buffer. BoundPipeline now catches a native unwind, releases
+its newly allocated uniforms and rethrows the original payload. This shared
+owner protects every draw; it does not translate or swallow the native failure.
+
+Claude relayed the published #1785 fix at c4aa4e5d5. Its old patch is removed.
+The broader retained regression caught a separate incomplete classification:
+is_function of a known namespaced binding cast was treated as a caller value,
+omitting its missing-root guard and throwing ReferenceError. A known ordinary
+Rust function cast was also accepted inconsistently. Filed #1786 and shared the
+minimal reproducer and correction through agent-hub. The new patch makes
+asks_of_value consume the existing cast_from owner; it adds no second origin
+analysis. Twenty focused tests (156 assertions) pass; both affected mutations
+are caught. Their cold post-upgrade run averaged 43 s each (13.4 s build and
+4.6 s tests per mutant, plus cold baseline preparation); the compiler upgrade
+itself rebuilt in 45.66 s. Patch application passes 21 exact checks against
+the published pin. The broad compiler gate remains outstanding.
+
+The complete local app suite passes 51 browser checks, 48 app tests (161,395
+assertions, including patch proof), 28 native/compiled core tests and strict
+web Clippy. The full landing page, canvas interaction/lifecycle, quality policy
+and public Pages deployment remain unfinished.

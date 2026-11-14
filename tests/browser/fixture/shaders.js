@@ -62,3 +62,6 @@ Object.assign(window.shaderFixture,{wallMaskUrl});
 import {createShadowGeometry,shadowPipeline,encodeShadow,ShadowBuffers} from '../../../crates/web/src/shadow.js';
 import {prismShadowUniforms,lightGlassAccentUniforms} from '../../../crates/prism/src/light_uniforms.js';
 Object.assign(window.shaderFixture,{createShadowGeometry,shadowPipeline,encodeShadow,ShadowBuffers,prismShadowUniforms,lightGlassAccentUniforms});
+
+import {createLightGraph,LightGraph} from '../../../crates/web/src/light_graph.js';
+Object.assign(window.shaderFixture,{createLightGraph,LightGraph});

@@ -22,3 +22,5 @@ export {loadLightAssetTextures,destroyLightAssetTextures} from '@reference/app/[
 
 export {createPrismShadowGeometry,prismShadowUniforms} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/light/passes/shadow/tuning.ts';
 export {LIGHT_GLASS_ACCENT_TUNING} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/light/passes/glass-accent/tuning.ts';
+
+export {createLightPipeline} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/light/index.ts';

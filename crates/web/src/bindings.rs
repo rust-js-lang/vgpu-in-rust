@@ -8,6 +8,7 @@ use react::webapi::{
     GPUBindGroup, GPUBindGroupDescriptor, GPUBindGroupEntry, GPUBindingResource, GPUBufferBinding,
     GPUDevice, GPUQueue, GPURenderPipeline,
 };
+use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 
 pub struct UniformInput<'a> {
     pub name: &'a str,
@@ -184,7 +185,18 @@ impl BoundPipeline {
         label: &str,
     ) -> Result<Self, String> {
         let values = prepare_shader_bindings(device, source, inputs, label)?;
-        let group = match values.bind(device, pipeline, resources, label) {
+        // A native API can throw after uniform allocation. Keep cleanup at the
+        // binding owner so every graph has the same exception guarantee.
+        let bound = match catch_unwind(AssertUnwindSafe(|| {
+            values.bind(device, pipeline, resources, label)
+        })) {
+            Ok(result) => result,
+            Err(error) => {
+                values.destroy();
+                resume_unwind(error);
+            }
+        };
+        let group = match bound {
             Ok(group) => group,
             Err(error) => {
                 values.destroy();

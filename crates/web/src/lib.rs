@@ -31,3 +31,6 @@ pub mod wireframe;
 pub mod light_assets;
 
 pub mod shadow;
+
+pub mod light_graph;
+pub mod wall;

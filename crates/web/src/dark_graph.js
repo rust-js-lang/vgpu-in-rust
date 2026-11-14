@@ -18,9 +18,9 @@ import { lightMeshLayout } from "../../prism/src/light_mesh.js";
 import { glassUniforms, sceneUniforms } from "../../prism/src/uniforms.js";
 
 import LIGHT from "../../../assets/prism-background/pipelines/dark/passes/light/light.wgsl";
-import BACK from "../../../assets/prism-background/pipelines/shared/glass/glass-back.wgsl";
-import FRONT from "../../../assets/prism-background/pipelines/shared/glass/glass.wgsl";
-import COPY from "../../../assets/prism-background/pipelines/shared/presentation/copy-linear.wgsl";
+import glassBack from "../../../assets/prism-background/pipelines/shared/glass/glass-back.wgsl";
+import glass from "../../../assets/prism-background/pipelines/shared/glass/glass.wgsl";
+import copyLinear from "../../../assets/prism-background/pipelines/shared/presentation/copy-linear.wgsl";
 import { RuntimeState } from "../../prism/src/runtime_state.js";
 import { $index, $settle, $unwrap } from "@rust-js/std";
 
@@ -100,10 +100,10 @@ async function buildDarkGraph(device, runtime, settings, allocations) {
   );
   const pipelines = await Promise.all([
     lightPipeline(device, LIGHT, "rgba16float", `${label}.light`),
-    glassPipeline(device, BACK, "rgba16float", "Back", 1, `${label}.glass-back`),
+    glassPipeline(device, glassBack, "rgba16float", "Back", 1, `${label}.glass-back`),
     glassPipeline(
       device,
-      FRONT,
+      glass,
       "rgba16float",
       "Front",
       settings.sampleCount,
@@ -154,7 +154,7 @@ async function buildDarkGraph(device, runtime, settings, allocations) {
   ];
   const result$1 = BoundPipeline.prepare(
     device,
-    BACK,
+    glassBack,
     $index(pipelines, 1),
     [
       UniformInput.new(
@@ -185,7 +185,7 @@ async function buildDarkGraph(device, runtime, settings, allocations) {
   }
   const result$2 = BoundPipeline.prepare(
     device,
-    FRONT,
+    glass,
     $index(pipelines, 2),
     [
       UniformInput.new(
@@ -203,7 +203,7 @@ async function buildDarkGraph(device, runtime, settings, allocations) {
   Allocations.retainBindings(allocations, front.values);
   const result$3 = await createEffect(
     device,
-    COPY,
+    copyLinear,
     RenderTarget.signature(scene),
     [],
     [

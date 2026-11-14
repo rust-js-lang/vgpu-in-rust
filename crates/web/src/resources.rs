@@ -32,6 +32,12 @@ impl Allocations {
             self.buffers.push(uniform.resource.buffer);
         }
     }
+    pub(crate) fn retain_texture(&mut self, texture: &'static GPUTexture) {
+        self.textures.push(texture);
+    }
+    pub(crate) fn retain_buffer(&mut self, buffer: &'static GPUBuffer) {
+        self.buffers.push(buffer);
+    }
     pub(crate) fn destroy(&self) {
         for texture in &self.textures {
             texture.destroy();

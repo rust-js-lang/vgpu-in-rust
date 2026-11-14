@@ -56,3 +56,11 @@ texture cleanup. The pure core owns procedural pixels, mip values and swept
 shadow geometry. The shadow draw owns its distinct u32 indexed layout. Target
 compatibility is represented by RenderSignature, independent of texture ownership;
 glass fixed-function state is selected by GlassLayer (Back, Front, Accent).
+
+The light graph owns composition, its stable native backdrop bundle, scene-cache
+invalidation, view-specific draw ordering and resize rebinding. Asset baking,
+environment generation and target-signature pipeline compilation begin together;
+preparation waits for their outcomes before rollback or transfer of ownership.
+BoundPipeline releases its allocated uniforms if native bind-group creation
+unwinds, then rethrows the original payload. Both connected graph variants are
+compared against actual upstream pipeline implementations in real GPU tests.

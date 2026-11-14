@@ -23,6 +23,12 @@ export const Allocations = {
       allocations.buffers.push(uniform.resource.buffer);
     }
   },
+  retainTexture(allocations, texture) {
+    allocations.textures.push(texture);
+  },
+  retainBuffer(allocations, buffer) {
+    allocations.buffers.push(buffer);
+  },
   destroy(allocations) {
     for (const texture of allocations.textures) {
       texture.destroy();
