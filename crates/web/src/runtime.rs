@@ -6,15 +6,31 @@ use crate::environment::{
 use crate::geometry::{PrismBuffers, create_prism_geometry};
 use crate::light_mesh::build_light_mesh;
 use js::{Float32Array, JsError, Promise};
-use react::webapi::{GPUBuffer, GPUDevice, GPUSampler, GPUSamplerDescriptor};
+use react::webapi::{GPUBuffer, GPUDevice, GPUSampler, GPUSamplerDescriptor, GPUTextureView};
 use std::cell::RefCell;
 use std::rc::Rc;
 use vgpu_prism::controls::PrismControls;
 use vgpu_prism::framing::NormalizedViewport;
 use vgpu_prism::light_mesh::{
-    LIGHT_VERTEX_FLOATS, LIGHT_VERTEX_STRIDE, LightMeshLayout, LightMeshStats, light_mesh_layout,
+    LIGHT_VERTEX_FLOATS, LIGHT_VERTEX_STRIDE, LightMeshLayout, LightMeshStats,
 };
+use vgpu_prism::quality::PipelineQuality;
 use vgpu_prism::runtime_state::RuntimeState;
+
+/// Preparation owns these immutable inputs while the live runtime remains usable.
+/// GPU handles are borrowed from the runtime, which outlives pending preparations.
+pub struct GraphInputs {
+    pub label: String,
+    pub state: RuntimeState,
+    pub light_buffer: &'static GPUBuffer,
+    pub prism: PrismBuffers,
+    pub scene_sampler: &'static GPUSampler,
+    pub environment_sampler: &'static GPUSampler,
+    pub debug_environment_enabled: bool,
+    pub studio_view: &'static GPUTextureView,
+    pub debug_view: &'static GPUTextureView,
+    pub environment_ready: Promise<()>,
+}
 
 pub struct PrismRuntime {
     pub label: String,
@@ -46,7 +62,7 @@ pub fn create_prism_runtime(
     // applies the portrait overscan, as runtime/resources.ts and state.ts do.
     options.wall_half_extent = state.wall_extent();
     let mesh = build_light_mesh(&options, None, Some(&mut scratch));
-    let high = light_mesh_layout(128, 24);
+    let high = PipelineQuality::High.mesh_layout();
     let light_buffer = create_vertex_buffer(
         device,
         mesh.vertices,
@@ -77,6 +93,44 @@ pub fn create_prism_runtime(
     }
 }
 impl PrismRuntime {
+    /// Capture a candidate's layout without uploading it into the active mesh.
+    /// The controller changes the live layout only when that candidate activates.
+    pub fn graph_inputs(
+        &mut self,
+        device: &'static GPUDevice,
+        layout: LightMeshLayout,
+    ) -> Result<GraphInputs, String> {
+        if self.state.controls.wireframe {
+            self.ensure_wireframe(device);
+        }
+        let environment_ready = self.prepare_environment(device)?;
+        let studio_view = self
+            .studio_environment
+            .as_ref()
+            .expect("studio created")
+            .texture
+            .create_view(None);
+        let debug_view = self
+            .debug_environment
+            .as_ref()
+            .map(|debug| debug.texture.create_view(None))
+            .unwrap_or(studio_view);
+        let mut state = self.state.clone();
+        state.set_light_mesh_layout(layout);
+        Ok(GraphInputs {
+            label: self.label.clone(),
+            state,
+            light_buffer: self.light_buffer,
+            prism: self.prism,
+            scene_sampler: self.scene_sampler,
+            environment_sampler: self.environment_sampler,
+            debug_environment_enabled: self.debug_environment_enabled,
+            studio_view,
+            debug_view,
+            environment_ready,
+        })
+    }
+
     pub fn set_controls(&mut self, device: &GPUDevice, controls: PrismControls) {
         if self.state.set_controls(controls) {
             self.refresh_light_mesh(device);

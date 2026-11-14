@@ -5,7 +5,7 @@ use crate::geometry::encode_prism;
 use crate::glass_pass::{GlassLayer, glass_pipeline};
 use crate::light_assets::{LightAssetTextures, load_light_asset_textures};
 use crate::resources::Allocations;
-use crate::runtime::PrismRuntime;
+use crate::runtime::{GraphInputs, PrismRuntime};
 use crate::shader::{ShaderSource, shader_module};
 use crate::shadow::{ShadowBuffers, create_shadow_geometry, encode_shadow, shadow_pipeline};
 use crate::spectral_pass::{encode_light, light_pipeline};
@@ -18,7 +18,6 @@ use react::webapi::{
 };
 use std::rc::Rc;
 use vgpu_prism::controls::{PrismTheme, PrismView};
-use vgpu_prism::light_mesh::light_mesh_layout;
 use vgpu_prism::light_uniforms::{
     light_caustic_uniforms, light_glass_accent_uniforms, light_present_uniforms,
     light_wall_uniforms, prism_shadow_uniforms,
@@ -90,21 +89,13 @@ pub struct LightGraph {
 
 pub async fn create_light_graph(
     device: &'static GPUDevice,
-    runtime: &mut PrismRuntime,
+    runtime: GraphInputs,
     settings: LightSettings<'_>,
 ) -> Result<LightGraph, String> {
-    runtime.set_light_mesh_layout(
-        device,
-        if settings.low_quality {
-            light_mesh_layout(64, 12)
-        } else {
-            light_mesh_layout(128, 24)
-        },
-    );
     let mut allocations = Allocations::default();
     let result = match js::settle(js::promise(build_light_graph(
         device,
-        runtime,
+        &runtime,
         settings,
         &mut allocations,
     )))
@@ -117,7 +108,7 @@ pub async fn create_light_graph(
         allocations.destroy();
     }
     let mut graph = result?;
-    let prepared = match js::settle(js::promise(graph.prepare_wireframes(device, runtime))).await {
+    let prepared = match js::settle(js::promise(graph.prepare_wireframes(device, &runtime))).await {
         Ok(result) => result,
         Err(error) => Err(error.message()),
     };
@@ -194,7 +185,7 @@ async fn compile_light_pipelines(
 
 async fn build_light_graph(
     device: &'static GPUDevice,
-    runtime: &mut PrismRuntime,
+    runtime: &GraphInputs,
     settings: LightSettings<'_>,
     allocations: &mut Allocations,
 ) -> Result<LightGraph, String> {
@@ -216,7 +207,7 @@ async fn build_light_graph(
     allocations.retain_buffer(shadow_geometry.vertices);
     allocations.retain_buffer(shadow_geometry.indices);
     let wall_source = if settings.low_quality { WALL_LOW } else { WALL };
-    let environment = runtime.prepare_environment(device)?;
+    let environment = runtime.environment_ready;
     // Every GPU-owning branch settles before any failure releases graph or runtime resources.
     // Settling each promise turns rejection into a value, so all3 still waits for all three.
     let (assets, environment, pipelines) = js::promise::all3((
@@ -320,17 +311,8 @@ async fn build_light_graph(
         "light.caustic",
     )?;
     allocations.retain_bindings(&caustic.values);
-    let studio_view = runtime
-        .studio_environment
-        .as_ref()
-        .expect("environment prepared")
-        .texture
-        .create_view(None);
-    let debug_view = runtime
-        .debug_environment
-        .as_ref()
-        .map(|debug| debug.texture.create_view(None))
-        .unwrap_or(studio_view);
+    let studio_view = runtime.studio_view;
+    let debug_view = runtime.debug_view;
     let shared = [
         NamedResource {
             name: "studioEnvironment",
@@ -505,10 +487,9 @@ impl LightGraph {
     pub async fn prepare_wireframes(
         &mut self,
         device: &GPUDevice,
-        runtime: &mut PrismRuntime,
+        runtime: &GraphInputs,
     ) -> Result<(), String> {
         if runtime.state.controls.wireframe && self.wireframe.is_none() {
-            runtime.ensure_wireframe(device);
             self.wireframe = Some(
                 create_wireframe_draw(
                     device,

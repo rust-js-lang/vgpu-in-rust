@@ -33,6 +33,7 @@ static PRISM_FRAME_POINTS: LazyLock<Vec<[f64; 3]>> = LazyLock::new(|| {
         .collect()
 });
 
+#[derive(Clone)]
 pub struct RuntimeState {
     pub output_size: [f64; 2],
     pub controls: PrismControls,

@@ -7,14 +7,12 @@ import { encodePrism } from "./geometry.js";
 import { glassPipeline } from "./glass_pass.js";
 import { LightAssetTextures, loadLightAssetTextures } from "./light_assets.js";
 import { Allocations } from "./resources.js";
-import { PrismRuntime } from "./runtime.js";
 import { shaderModule } from "./shader.js";
 import { ShadowBuffers, createShadowGeometry, encodeShadow, shadowPipeline } from "./shadow.js";
 import { encodeLight, lightPipeline } from "./spectral_pass.js";
 import { RenderTarget } from "./targets.js";
 import { wallPipeline } from "./wall.js";
 import { createWireframeDraw } from "./wireframe.js";
-import { lightMeshLayout } from "../../prism/src/light_mesh.js";
 import {
   lightCausticUniforms,
   lightGlassAccentUniforms,
@@ -46,11 +44,6 @@ function lightFrameDefault_default() {
 }
 
 export async function createLightGraph(device, runtime, settings) {
-  PrismRuntime.setLightMeshLayout(
-    runtime,
-    device,
-    settings.lowQuality ? lightMeshLayout(64, 12) : lightMeshLayout(128, 24),
-  );
   const allocations = { textures: [], buffers: [] };
   const value = await $settle(buildLightGraph(device, runtime, settings, allocations));
   let result;
@@ -132,11 +125,7 @@ async function buildLightGraph(device, runtime, settings, allocations) {
   Allocations.retainBuffer(allocations, shadowGeometry.vertices);
   Allocations.retainBuffer(allocations, shadowGeometry.indices);
   const wallSource = settings.lowQuality ? WALL_LOW : WALL;
-  const result = PrismRuntime.prepareEnvironment(runtime, device);
-  if (result.TAG === "Err") {
-    return result;
-  }
-  const environment = result._0;
+  const environment = runtime.environmentReady;
   // Every GPU-owning branch settles before any failure releases graph or runtime resources.
   // Settling each promise turns rejection into a value, so all3 still waits for all three.
   let [assets, environment$1, pipelines] = await Promise.all([
@@ -144,28 +133,28 @@ async function buildLightGraph(device, runtime, settings, allocations) {
     $settle(environment),
     $settle(compileLightPipelines(device, wallSource, settings)),
   ]);
-  const result$1 = assets.TAG === "Err" ? { TAG: "Err", _0: assets._0.message } : assets;
+  const result = assets.TAG === "Err" ? { TAG: "Err", _0: assets._0.message } : assets;
+  if (result.TAG === "Err") {
+    return result;
+  }
+  const result$1 = result._0;
   if (result$1.TAG === "Err") {
     return result$1;
   }
-  const result$2 = result$1._0;
-  if (result$2.TAG === "Err") {
-    return result$2;
-  }
-  assets = result$2._0;
+  assets = result$1._0;
   for (const texture of [assets.wallMaterial, assets.wallLighting, assets.causticProfile]) {
     Allocations.retainTexture(allocations, texture);
   }
-  const result$3 =
+  const result$2 =
     environment$1.TAG === "Err" ? { TAG: "Err", _0: environment$1._0.message } : environment$1;
+  if (result$2.TAG === "Err") {
+    return result$2;
+  }
+  const result$3 = pipelines.TAG === "Err" ? { TAG: "Err", _0: pipelines._0.message } : pipelines;
   if (result$3.TAG === "Err") {
     return result$3;
   }
-  const result$4 = pipelines.TAG === "Err" ? { TAG: "Err", _0: pipelines._0.message } : pipelines;
-  if (result$4.TAG === "Err") {
-    return result$4;
-  }
-  pipelines = result$4._0;
+  pipelines = result$3._0;
   const state = runtime.state;
   const materialSampler = device.createSampler({
     minFilter: "linear",
@@ -177,7 +166,7 @@ async function buildLightGraph(device, runtime, settings, allocations) {
   const wallMaterial = assets.wallMaterial.createView();
   const wallLighting = assets.wallLighting.createView();
   const causticProfile = assets.causticProfile.createView();
-  const result$5 = BoundPipeline.prepare(
+  const result$4 = BoundPipeline.prepare(
     device,
     wallSource,
     $index(pipelines, 0),
@@ -198,12 +187,12 @@ async function buildLightGraph(device, runtime, settings, allocations) {
     ],
     "light.wall",
   );
-  if (result$5.TAG === "Err") {
-    return result$5;
+  if (result$4.TAG === "Err") {
+    return result$4;
   }
-  const wall = result$5._0;
+  const wall = result$4._0;
   Allocations.retainBindings(allocations, wall.values);
-  const result$6 = BoundPipeline.prepare(
+  const result$5 = BoundPipeline.prepare(
     device,
     SHADOW,
     $index(pipelines, 1),
@@ -211,12 +200,12 @@ async function buildLightGraph(device, runtime, settings, allocations) {
     [],
     "light.shadow",
   );
-  if (result$6.TAG === "Err") {
-    return result$6;
+  if (result$5.TAG === "Err") {
+    return result$5;
   }
-  const shadow = result$6._0;
+  const shadow = result$5._0;
   Allocations.retainBindings(allocations, shadow.values);
-  const result$7 = BoundPipeline.prepare(
+  const result$6 = BoundPipeline.prepare(
     device,
     CAUSTIC,
     $index(pipelines, 2),
@@ -250,16 +239,13 @@ async function buildLightGraph(device, runtime, settings, allocations) {
     ],
     "light.caustic",
   );
-  if (result$7.TAG === "Err") {
-    return result$7;
+  if (result$6.TAG === "Err") {
+    return result$6;
   }
-  const caustic = result$7._0;
+  const caustic = result$6._0;
   Allocations.retainBindings(allocations, caustic.values);
-  const studioView = $unwrap(
-    runtime.studioEnvironment,
-    "environment prepared",
-  ).texture.createView();
-  const debugView = runtime.debugEnvironment?.texture.createView() ?? studioView;
+  const studioView = runtime.studioView;
+  const debugView = runtime.debugView;
   const shared = [
     {
       name: "studioEnvironment",
@@ -274,7 +260,7 @@ async function buildLightGraph(device, runtime, settings, allocations) {
       resource: runtime.environmentSampler,
     },
   ];
-  const result$8 = BoundPipeline.prepare(
+  const result$7 = BoundPipeline.prepare(
     device,
     glassBack,
     $index(pipelines, 3),
@@ -287,12 +273,12 @@ async function buildLightGraph(device, runtime, settings, allocations) {
     shared,
     "light.back",
   );
-  if (result$8.TAG === "Err") {
-    return result$8;
+  if (result$7.TAG === "Err") {
+    return result$7;
   }
-  const back = result$8._0;
+  const back = result$7._0;
   Allocations.retainBindings(allocations, back.values);
-  const result$9 = BoundPipeline.prepare(
+  const result$8 = BoundPipeline.prepare(
     device,
     ACCENT,
     $index(pipelines, 5),
@@ -306,10 +292,10 @@ async function buildLightGraph(device, runtime, settings, allocations) {
     shared,
     "light.accent",
   );
-  if (result$9.TAG === "Err") {
-    return result$9;
+  if (result$8.TAG === "Err") {
+    return result$8;
   }
-  const accent = result$9._0;
+  const accent = result$8._0;
   Allocations.retainBindings(allocations, accent.values);
   const frontResources = [
     {
@@ -324,7 +310,7 @@ async function buildLightGraph(device, runtime, settings, allocations) {
   for (let i = 0; i < shared.length; i++) {
     frontResources.push(shared[i]);
   }
-  const result$10 = BoundPipeline.prepare(
+  const result$9 = BoundPipeline.prepare(
     device,
     glass,
     $index(pipelines, 4),
@@ -337,12 +323,12 @@ async function buildLightGraph(device, runtime, settings, allocations) {
     frontResources,
     "light.front",
   );
-  if (result$10.TAG === "Err") {
-    return result$10;
+  if (result$9.TAG === "Err") {
+    return result$9;
   }
-  const front = result$10._0;
+  const front = result$9._0;
   Allocations.retainBindings(allocations, front.values);
-  const result$11 = BoundPipeline.prepare(
+  const result$10 = BoundPipeline.prepare(
     device,
     copyLinear,
     $index(pipelines, 6),
@@ -355,12 +341,12 @@ async function buildLightGraph(device, runtime, settings, allocations) {
     ],
     "light.copy",
   );
-  if (result$11.TAG === "Err") {
-    return result$11;
+  if (result$10.TAG === "Err") {
+    return result$10;
   }
-  const copy = result$11._0;
+  const copy = result$10._0;
   Allocations.retainBindings(allocations, copy.values);
-  const result$12 = BoundPipeline.prepare(
+  const result$11 = BoundPipeline.prepare(
     device,
     PRESENT,
     $index(pipelines, 7),
@@ -373,10 +359,10 @@ async function buildLightGraph(device, runtime, settings, allocations) {
     ],
     "light.present",
   );
-  if (result$12.TAG === "Err") {
-    return result$12;
+  if (result$11.TAG === "Err") {
+    return result$11;
   }
-  const present = result$12._0;
+  const present = result$11._0;
   Allocations.retainBindings(allocations, present.values);
   const bundle = device.createRenderBundleEncoder({
     label: "light.backdrop-bundle",
@@ -433,7 +419,6 @@ async function buildLightGraph(device, runtime, settings, allocations) {
 export const LightGraph = {
   async prepareWireframes(lightGraph, device, runtime) {
     if (runtime.state.controls.wireframe && lightGraph.wireframe == null) {
-      PrismRuntime.ensureWireframe(runtime, device);
       const value = [
         UniformInput.new("params", { viewProjection: runtime.state.view.viewProjection }),
       ];

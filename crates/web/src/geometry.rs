@@ -8,6 +8,7 @@ use vgpu_prism::prism_mesh::{prism_mesh_data, prism_wireframe_indices};
 use vgpu_prism::types::{PRISM_BACK_Z, PRISM_FRONT_Z, PRISM_TRIANGLE};
 
 /// Shared by the two glass interfaces; debug topology is uploaded lazily.
+#[derive(Clone, Copy)]
 pub struct PrismBuffers {
     pub vertices: &'static GPUBuffer,
     pub indices: &'static GPUBuffer,

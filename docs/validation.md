@@ -33,9 +33,9 @@ Passing application checks:
   claimed.
 - Invalid uniform values allocate no GPU resource. Rejected updates preserve the
   previous upload, and valid updates retain the same buffer.
-- 51 production-built Chromium checks. Ten cover setup-tab parity, copy/reset,
+- 55 production-built Chromium checks. Ten cover setup-tab parity, copy/reset,
   rapid transitions, layout stability, unavailable/denied clipboard, reduced
-  motion, mobile sizing and unmount cleanup. Forty-one require a real WebGPU adapter:
+  motion, mobile sizing and unmount cleanup. Forty-five require a real WebGPU adapter:
   all 44 retained shaders compile; malformed shader diagnostics work; the Rust
   fullscreen pass copies exact pixels/orientation; the additive light pass
   renders red/blue spectral output and disappears with zero reveal; both glass
@@ -361,3 +361,36 @@ The complete local app suite passes 51 browser checks, 48 app tests (161,395
 assertions, including patch proof), 28 native/compiled core tests and strict
 web Clippy. The full landing page, canvas interaction/lifecycle, quality policy
 and public Pages deployment remain unfinished.
+
+## Serialized theme and quality activation
+
+Graph preparation now consumes GraphInputs: an owned snapshot of camera/control
+values and borrowed native GPU handles, plus the shared environment-ready promise.
+It holds no mutable live-runtime borrow across an await. A candidate's mesh layout
+is captured independently; only activation uploads that layout to the shared mesh.
+This closes an integration gap in the isolated constructors, which previously
+changed the live layout before preparation could succeed or become stale.
+
+PipelineController serializes requests, retains the current graph while a
+candidate prepares, discards stale candidates, keeps the initial ready promise
+identity and clears settled tasks for retry. Disposal immediately drops the
+active graph and returns a stable cleanup promise while pending preparation
+still needs the runtime. Quality mesh dimensions and runtime capacity now consume
+the same PipelineQuality owner. Rust owns these behaviors; no application
+TypeScript is introduced.
+
+Four new real-GPU checks exercise this boundary. A delayed light pipeline leaves
+the dark scene interactive: pointer orbit changes still render and every output
+byte matches the original controller. Rapid theme/quality reversals activate only
+the latest requested pair; event order matches upstream. Separate quality/theme
+failures preserve the active image and high-tier mesh byte for byte, then retry
+successfully. Disposal during delayed light preparation waits, activates nothing
+and releases every allocated texture and buffer exactly once after runtime cleanup.
+
+All 55 browser checks pass (16.1 s), alongside 48 app checks with 161,395
+assertions, 28 native and compiled core invariants, and strict web Clippy. The
+current pin's attempted broad compiler gate was stopped to avoid competing with
+an earlier shared-machine gate; it is not counted as passing. Scoped app evidence
+supports this app checkpoint only. The full canvas/frame loop, DOM activity and
+responsive observers, automatic quality policy, React background/root, remaining
+landing sections and Pages deployment still remain.

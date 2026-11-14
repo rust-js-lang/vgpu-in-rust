@@ -2,7 +2,7 @@
 
 import type { BoundPipeline } from "./bindings.js";
 import type { DarkPostprocess } from "./postprocess.js";
-import type { PrismRuntime } from "./runtime.js";
+import type { GraphInputs, PrismRuntime } from "./runtime.js";
 import type { RenderTarget } from "./targets.js";
 
 export interface DarkSettings {
@@ -37,10 +37,10 @@ export interface DarkGraph {
 }
 
 export const DarkGraph: {
-    prepareWireframes(darkGraph: DarkGraph, device: GPUDevice, runtime: PrismRuntime): Promise<any>;
+    prepareWireframes(darkGraph: DarkGraph, device: GPUDevice, runtime: GraphInputs): Promise<any>;
     resize(darkGraph: DarkGraph, device: GPUDevice, runtime: PrismRuntime): any;
     render(darkGraph: DarkGraph, device: GPUDevice, runtime: PrismRuntime, output: GPUTextureView, frame: DarkFrame): any;
     destroy(darkGraph: DarkGraph): void;
 };
 
-export function createDarkGraph(device: GPUDevice, runtime: PrismRuntime, settings: DarkSettings): Promise<any>;
+export function createDarkGraph(device: GPUDevice, runtime: GraphInputs, settings: DarkSettings): Promise<any>;

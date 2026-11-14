@@ -2,7 +2,7 @@
 
 import type { BoundPipeline } from "./bindings.js";
 import type { LightAssetTextures } from "./light_assets.js";
-import type { PrismRuntime } from "./runtime.js";
+import type { GraphInputs, PrismRuntime } from "./runtime.js";
 import type { ShadowBuffers } from "./shadow.js";
 import type { RenderTarget } from "./targets.js";
 
@@ -41,10 +41,10 @@ export interface LightGraph {
 }
 
 export const LightGraph: {
-    prepareWireframes(lightGraph: LightGraph, device: GPUDevice, runtime: PrismRuntime): Promise<any>;
+    prepareWireframes(lightGraph: LightGraph, device: GPUDevice, runtime: GraphInputs): Promise<any>;
     resize(lightGraph: LightGraph, device: GPUDevice, runtime: PrismRuntime): any;
     render(lightGraph: LightGraph, device: GPUDevice, runtime: PrismRuntime, output: GPUTextureView, frame: LightFrame): any;
     destroy(lightGraph: LightGraph): void;
 };
 
-export function createLightGraph(device: GPUDevice, runtime: PrismRuntime, settings: LightSettings): Promise<any>;
+export function createLightGraph(device: GPUDevice, runtime: GraphInputs, settings: LightSettings): Promise<any>;

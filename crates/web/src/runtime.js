@@ -12,8 +12,8 @@ import { buildLightMesh } from "./light_mesh.js";
 import {
   LIGHT_VERTEX_FLOATS,
   LIGHT_VERTEX_STRIDE,
-  lightMeshLayout,
 } from "../../prism/src/light_mesh.js";
+import { PipelineQuality } from "../../prism/src/quality.js";
 import { RuntimeState } from "../../prism/src/runtime_state.js";
 import { $settle, $unwrap } from "@rust-js/std";
 
@@ -25,7 +25,7 @@ export function createPrismRuntime(device, output, label, layout, debugEnvironme
   // applies the portrait overscan, as runtime/resources.ts and state.ts do.
   options.wallHalfExtent = RuntimeState.wallExtent(state);
   const mesh = buildLightMesh(options, undefined, scratch);
-  const high = lightMeshLayout(128, 24);
+  const high = PipelineQuality.meshLayout("high");
   const lightBuffer = createVertexBuffer(
     device,
     mesh.vertices,
@@ -52,6 +52,105 @@ export function createPrismRuntime(device, output, label, layout, debugEnvironme
 }
 
 export const PrismRuntime = {
+  /**
+   * Capture a candidate's layout without uploading it into the active mesh.
+   * The controller changes the live layout only when that candidate activates.
+   */
+  graphInputs(prismRuntime, device, layout) {
+    if (prismRuntime.state.controls.wireframe) {
+      PrismRuntime.ensureWireframe(prismRuntime, device);
+    }
+    const result = PrismRuntime.prepareEnvironment(prismRuntime, device);
+    if (result.TAG === "Err") {
+      return result;
+    }
+    const environmentReady = result._0;
+    const studioView = $unwrap(
+      prismRuntime.studioEnvironment,
+      "studio created",
+    ).texture.createView();
+    const debugView = prismRuntime.debugEnvironment?.texture.createView() ?? studioView;
+    const state = {
+      ...prismRuntime.state,
+      outputSize: prismRuntime.state.outputSize.slice(),
+      controls: {
+        ...prismRuntime.state.controls,
+        spectralDispersion:
+          prismRuntime.state.controls.spectralDispersion == null
+            ? prismRuntime.state.controls.spectralDispersion
+            : { ...prismRuntime.state.controls.spectralDispersion },
+        beamMouseY: { ...prismRuntime.state.controls.beamMouseY },
+        lightFade: { ...prismRuntime.state.controls.lightFade },
+        lightMode: {
+          ...prismRuntime.state.controls.lightMode,
+          wall: { ...prismRuntime.state.controls.lightMode.wall },
+          caustic: { ...prismRuntime.state.controls.lightMode.caustic },
+          output: { ...prismRuntime.state.controls.lightMode.output },
+        },
+        glass: {
+          ...prismRuntime.state.controls.glass,
+          transmission: {
+            ...prismRuntime.state.controls.glass.transmission,
+            dark: {
+              ...prismRuntime.state.controls.glass.transmission.dark,
+              absorption: prismRuntime.state.controls.glass.transmission.dark.absorption.slice(),
+            },
+            light: {
+              ...prismRuntime.state.controls.glass.transmission.light,
+              absorption: prismRuntime.state.controls.glass.transmission.light.absorption.slice(),
+            },
+          },
+          reflection: {
+            ...prismRuntime.state.controls.glass.reflection,
+            dark: { ...prismRuntime.state.controls.glass.reflection.dark },
+            light: { ...prismRuntime.state.controls.glass.reflection.light },
+          },
+        },
+        postprocess: { ...prismRuntime.state.controls.postprocess },
+      },
+      orbit: prismRuntime.state.orbit.slice(),
+      framingViewport:
+        prismRuntime.state.framingViewport == null
+          ? prismRuntime.state.framingViewport
+          : { ...prismRuntime.state.framingViewport },
+      framing: { ...prismRuntime.state.framing, offset: prismRuntime.state.framing.offset.slice() },
+      view: {
+        ...prismRuntime.state.view,
+        camera: {
+          ...prismRuntime.state.view.camera,
+          position: prismRuntime.state.view.camera.position.slice(),
+          quaternion: prismRuntime.state.view.camera.quaternion.slice(),
+          target: prismRuntime.state.view.camera.target.slice(),
+          up: prismRuntime.state.view.camera.up.slice(),
+          lens: { ...prismRuntime.state.view.camera.lens },
+          projection: prismRuntime.state.view.camera.projection.slice(),
+          view: prismRuntime.state.view.camera.view.slice(),
+        },
+        position: prismRuntime.state.view.position.slice(),
+        forward: prismRuntime.state.view.forward.slice(),
+        right: prismRuntime.state.view.right.slice(),
+        up: prismRuntime.state.view.up.slice(),
+      },
+      lightMeshLayout: { ...prismRuntime.state.lightMeshLayout },
+    };
+    RuntimeState.setLightMeshLayout(state, { ...layout });
+    return {
+      TAG: "Ok",
+      _0: {
+        label: prismRuntime.label,
+        state,
+        lightBuffer: prismRuntime.lightBuffer,
+        prism: prismRuntime.prism,
+        sceneSampler: prismRuntime.sceneSampler,
+        environmentSampler: prismRuntime.environmentSampler,
+        debugEnvironmentEnabled: prismRuntime.debugEnvironmentEnabled,
+        studioView,
+        debugView,
+        environmentReady,
+      },
+    };
+  },
+
   setControls(prismRuntime, device, controls) {
     if (RuntimeState.setControls(prismRuntime.state, controls)) {
       PrismRuntime.refreshLightMesh(prismRuntime, device);

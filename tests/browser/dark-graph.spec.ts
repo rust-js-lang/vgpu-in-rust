@@ -9,7 +9,7 @@ for(const low of [false,true])for(const packed of [false,true])test('complete Ru
     const actualRuntime=f.createPrismRuntime(device,size,'actual',layout,false),expectedRuntime=ref.createPrismRuntime(gpu,size,'expected',{lightMeshLayout:layout});
     const output=f.createRenderTarget(device,size,'rgba8unorm',1,'output'),expectedOutput=ref.target(gpu,{size,format:'rgba8unorm'});
     function value(result:any){if(result.TAG==='Err')throw Error(String(result._0));return result._0;}
-    const actual=value(await f.createDarkGraph(device,actualRuntime,{outputFormat:'rgba8unorm',lowQuality:low,sampleCount:4}));
+    const actual=value(await f.createDarkGraph(device,value(f.PrismRuntime.graphInputs(actualRuntime,device,layout)),{outputFormat:'rgba8unorm',lowQuality:low,sampleCount:4}));
     const expected=ref.createDarkPipeline(expectedRuntime,{quality:low?'low':'high'});await expected.prepare(expectedOutput);
     const comparisons:Array<{view:string,stage:string,different:number,nonzero:number}>=[];
     async function pixels(texture:GPUTexture,bytes:number){
@@ -66,7 +66,7 @@ for(const low of [false,true])for(const packed of [false,true])test('complete Ru
       for(const [wireframe,lightWireframe]of [[true,false],[false,true],[true,true]]){
         const controls=f.defaultPrismControls();controls.wireframe=wireframe;controls.lightWireframe=lightWireframe;
         f.PrismRuntime.setControls(actualRuntime,device,controls);ref.setRuntimeControls(expectedRuntime,controls);
-        value(await f.DarkGraph.prepareWireframes(actual,device,actualRuntime));await expected.prepare(expectedOutput);
+        value(await f.DarkGraph.prepareWireframes(actual,device,value(f.PrismRuntime.graphInputs(actualRuntime,device,layout))));await expected.prepare(expectedOutput);
         const frame={time:9,updateScene:true,revealProgress:1,beamWidthReveal:0.65};
         value(f.DarkGraph.render(actual,device,actualRuntime,output.view,frame));expected.bind(9,frame);ref.frame(gpu,(current:any)=>expected.render(current,expectedOutput,frame));
         await compare('wire-'+wireframe+'-'+lightWireframe,'background',actual.background.texture,expected.targets.backdropHDR.color.gpu,8);
@@ -101,11 +101,11 @@ test('late dark graph construction failure releases every graph allocation and p
     }
     const compile=device.createRenderPipelineAsync.bind(device);
     device.createRenderPipelineAsync=descriptor=>descriptor.label?.endsWith('.dust')?Promise.reject(Error('injected dust failure')):compile(descriptor);
-    const failed=await f.createDarkGraph(device,runtime,{outputFormat:'rgba8unorm',lowQuality:true,sampleCount:4});
+    const failed=await f.createDarkGraph(device,value(f.PrismRuntime.graphInputs(runtime,device,f.lightMeshLayout(64,12))),{outputFormat:'rgba8unorm',lowQuality:true,sampleCount:4});
     const rolledBack=made.length>5&&made.every(record=>record.destroyed===1),failureCount=made.length;
     const sharedReady=value(f.PrismRuntime.prepareEnvironment(runtime,device))===ready&&runtime.studioEnvironment.prepared;
     device.createRenderPipelineAsync=compile;device.pushErrorScope('validation');
-    const retry=value(await f.createDarkGraph(device,runtime,{outputFormat:'rgba8unorm',lowQuality:true,sampleCount:4}));
+    const retry=value(await f.createDarkGraph(device,value(f.PrismRuntime.graphInputs(runtime,device,f.lightMeshLayout(64,12))),{outputFormat:'rgba8unorm',lowQuality:true,sampleCount:4}));
     value(f.DarkGraph.render(retry,device,runtime,output.view,{time:3,updateScene:true,revealProgress:1,beamWidthReveal:1}));
     f.DarkGraph.destroy(retry);
     const retriedWithoutEnvironment=made.slice(failureCount).every(record=>!record.label.includes('environment-'));

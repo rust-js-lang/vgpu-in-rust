@@ -8,7 +8,7 @@ use crate::postprocess::{
     DarkPostprocess, PostprocessSettings, create_dark_postprocess, create_effect,
 };
 use crate::resources::Allocations;
-use crate::runtime::PrismRuntime;
+use crate::runtime::{GraphInputs, PrismRuntime};
 use crate::shader::ShaderSource;
 use crate::spectral_pass::{encode_light, light_pipeline};
 use crate::targets::RenderTarget;
@@ -21,7 +21,6 @@ use std::rc::Rc;
 use vgpu_prism::color::dark_wall_clear;
 use vgpu_prism::controls::{PrismTheme, PrismView};
 use vgpu_prism::dust::dust_uniforms;
-use vgpu_prism::light_mesh::light_mesh_layout;
 use vgpu_prism::uniforms::WireframeUniforms;
 use vgpu_prism::uniforms::{glass_uniforms, scene_uniforms};
 
@@ -76,24 +75,16 @@ pub struct DarkGraph {
 }
 pub async fn create_dark_graph(
     device: &'static GPUDevice,
-    runtime: &mut PrismRuntime,
+    runtime: GraphInputs,
     settings: DarkSettings<'_>,
 ) -> Result<DarkGraph, String> {
-    runtime.set_light_mesh_layout(
-        device,
-        if settings.low_quality {
-            light_mesh_layout(64, 12)
-        } else {
-            light_mesh_layout(128, 24)
-        },
-    );
-    if let Err(error) = js::settle(runtime.prepare_environment(device)?).await {
+    if let Err(error) = js::settle(runtime.environment_ready).await {
         return Err(error.message());
     }
     let mut allocations = Allocations::default();
     let result = match js::settle(js::promise(build_dark_graph(
         device,
-        runtime,
+        &runtime,
         settings,
         &mut allocations,
     )))
@@ -106,7 +97,7 @@ pub async fn create_dark_graph(
         allocations.destroy();
     }
     let mut graph = result?;
-    let prepared = match js::settle(js::promise(graph.prepare_wireframes(device, runtime))).await {
+    let prepared = match js::settle(js::promise(graph.prepare_wireframes(device, &runtime))).await {
         Ok(result) => result,
         Err(error) => Err(error.message()),
     };
@@ -118,7 +109,7 @@ pub async fn create_dark_graph(
 }
 async fn build_dark_graph(
     device: &GPUDevice,
-    runtime: &PrismRuntime,
+    runtime: &GraphInputs,
     settings: DarkSettings<'_>,
     allocations: &mut Allocations,
 ) -> Result<DarkGraph, String> {
@@ -182,16 +173,8 @@ async fn build_dark_graph(
         &format!("{label}.light"),
     )?;
     allocations.retain_bindings(&light.values);
-    let studio = runtime
-        .studio_environment
-        .as_ref()
-        .expect("environment prepared");
-    let studio_view = studio.texture.create_view(None);
-    let debug_view = runtime
-        .debug_environment
-        .as_ref()
-        .map(|debug| debug.texture.create_view(None))
-        .unwrap_or(studio_view);
+    let studio_view = runtime.studio_view;
+    let debug_view = runtime.debug_view;
     let shared = [
         NamedResource {
             name: "studioEnvironment",
@@ -357,10 +340,9 @@ impl DarkGraph {
     pub async fn prepare_wireframes(
         &mut self,
         device: &GPUDevice,
-        runtime: &mut PrismRuntime,
+        runtime: &GraphInputs,
     ) -> Result<(), String> {
         if runtime.state.controls.wireframe && self.wireframe.is_none() {
-            runtime.ensure_wireframe(device);
             self.wireframe = Some(
                 create_wireframe_draw(
                     device,

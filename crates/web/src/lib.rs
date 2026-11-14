@@ -34,3 +34,5 @@ pub mod shadow;
 
 pub mod light_graph;
 pub mod wall;
+
+pub mod pipeline_controller;

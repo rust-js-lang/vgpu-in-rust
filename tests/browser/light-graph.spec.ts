@@ -14,7 +14,7 @@ for(const low of [false,true])for(const samples of [1,4])test('complete Rust lig
     const actualRuntime=f.createPrismRuntime(device,size,'actual',layout,false),expectedRuntime=ref.createPrismRuntime(gpu,size,'expected',{lightMeshLayout:layout});
     const output=f.createRenderTarget(device,size,'rgba8unorm',1,'output'),expectedOutput=ref.target(gpu,{size,format:'rgba8unorm'});
     function value(result:any){if(result.TAG==='Err')throw Error(String(result._0));return result._0;}
-    const actual=value(await f.createLightGraph(device,actualRuntime,{outputFormat:'rgba8unorm',lowQuality:low,sampleCount:samples}));
+    const actual=value(await f.createLightGraph(device,value(f.PrismRuntime.graphInputs(actualRuntime,device,layout)),{outputFormat:'rgba8unorm',lowQuality:low,sampleCount:samples}));
     const expected=ref.createLightPipeline(expectedRuntime,{quality:low?'low':'high'});await expected.prepare(expectedOutput);
     const comparisons:Array<{view:string,stage:string,different:number,nonzero:number}>=[];
     async function pixels(texture:GPUTexture,bytes:number){
@@ -70,7 +70,7 @@ for(const low of [false,true])for(const samples of [1,4])test('complete Rust lig
       for(const view of ['glass','wall','back','caustic'])for(const [wireframe,lightWireframe]of [[true,false],[false,true],[true,true]]){
         const controls=f.defaultPrismControls();controls.view=view;controls.wireframe=wireframe;controls.lightWireframe=lightWireframe;
         f.PrismRuntime.setControls(actualRuntime,device,controls);ref.setRuntimeControls(expectedRuntime,controls);
-        value(await f.LightGraph.prepareWireframes(actual,device,actualRuntime));await expected.prepare(expectedOutput);
+        value(await f.LightGraph.prepareWireframes(actual,device,value(f.PrismRuntime.graphInputs(actualRuntime,device,layout))));await expected.prepare(expectedOutput);
         const frame={time:9,updateScene:true,revealProgress:1,beamWidthReveal:0.65};
         value(f.LightGraph.render(actual,device,actualRuntime,output.view,frame));expected.bind(9,frame);ref.frame(gpu,(current:any)=>expected.render(current,expectedOutput,frame));
         await compare('wire-'+view+'-'+wireframe+'-'+lightWireframe,'background',actual.background.texture,expected.targets.backdropHDR.color.gpu,8);
@@ -127,7 +127,7 @@ for(const failure of ['pipeline','binding','environment'] as const)test(
         };
       }
       let settled=false;
-      const pending=f.createLightGraph(device,runtime,{outputFormat:'rgba8unorm',lowQuality:true,sampleCount:4}).then((result:any)=>{settled=true;return result;});
+      const pending=f.createLightGraph(device,value(f.PrismRuntime.graphInputs(runtime,device,f.lightMeshLayout(64,12))),{outputFormat:'rgba8unorm',lowQuality:true,sampleCount:4}).then((result:any)=>{settled=true;return result;});
       let waited=true;
       if(failure==='environment'){
         await entered;await Promise.resolve();await Promise.resolve();
@@ -138,7 +138,7 @@ for(const failure of ['pipeline','binding','environment'] as const)test(
       const rolledBack=made.length>5&&made.every(record=>record.destroyed===1),failureCount=made.length;
       runtime.environmentReady=ready;device.createRenderPipelineAsync=compile;device.createBindGroup=bind;
       device.pushErrorScope('validation');
-      const retry=value(await f.createLightGraph(device,runtime,{outputFormat:'rgba8unorm',lowQuality:true,sampleCount:4}));
+      const retry=value(await f.createLightGraph(device,value(f.PrismRuntime.graphInputs(runtime,device,f.lightMeshLayout(64,12))),{outputFormat:'rgba8unorm',lowQuality:true,sampleCount:4}));
       value(f.LightGraph.render(retry,device,runtime,output.view,{updateScene:true,revealProgress:1,beamWidthReveal:1}));
       f.LightGraph.destroy(retry);
       const retriedWithoutEnvironment=made.slice(failureCount).every(record=>!record.label.includes('environment-'));

@@ -7,6 +7,23 @@ import type { RuntimeState } from "../../prism/src/runtime_state.js";
 import type { EnvironmentTexture } from "./environment.js";
 import type { PrismBuffers } from "./geometry.js";
 
+/**
+ * Preparation owns these immutable inputs while the live runtime remains usable.
+ * GPU handles are borrowed from the runtime, which outlives pending preparations.
+ */
+export interface GraphInputs {
+    label: string;
+    state: RuntimeState;
+    lightBuffer: GPUBuffer;
+    prism: PrismBuffers;
+    sceneSampler: GPUSampler;
+    environmentSampler: GPUSampler;
+    debugEnvironmentEnabled: boolean;
+    studioView: GPUTextureView;
+    debugView: GPUTextureView;
+    environmentReady: Promise<undefined>;
+}
+
 export interface PrismRuntime {
     label: string;
     state: RuntimeState;
@@ -25,6 +42,7 @@ export interface PrismRuntime {
 }
 
 export const PrismRuntime: {
+    graphInputs(prismRuntime: PrismRuntime, device: GPUDevice, layout: LightMeshLayout): any;
     setControls(prismRuntime: PrismRuntime, device: GPUDevice, controls: PrismControls): void;
     setLampAim(prismRuntime: PrismRuntime, device: GPUDevice, arc: number, target: number): void;
     setOrbit(prismRuntime: PrismRuntime, x: number, y: number): void;

@@ -24,3 +24,5 @@ export {createPrismShadowGeometry,prismShadowUniforms} from '@reference/app/[lan
 export {LIGHT_GLASS_ACCENT_TUNING} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/light/passes/glass-accent/tuning.ts';
 
 export {createLightPipeline} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/light/index.ts';
+
+export {createPrismPipelineController} from '@reference/app/[lang]/(home)/components/prism-background/pipeline-controller.ts';

@@ -65,3 +65,6 @@ Object.assign(window.shaderFixture,{createShadowGeometry,shadowPipeline,encodeSh
 
 import {createLightGraph,LightGraph} from '../../../crates/web/src/light_graph.js';
 Object.assign(window.shaderFixture,{createLightGraph,LightGraph});
+
+import {createPipelineController,PipelineController,SceneGraph} from '../../../crates/web/src/pipeline_controller.js';
+Object.assign(window.shaderFixture,{createPipelineController,PipelineController,SceneGraph});

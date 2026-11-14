@@ -52,3 +52,5 @@ pub mod light_uniforms;
 
 pub mod light_asset_math;
 pub mod light_assets;
+
+pub mod quality;

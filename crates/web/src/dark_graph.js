@@ -8,13 +8,11 @@ import { encodePrism } from "./geometry.js";
 import { glassPipeline } from "./glass_pass.js";
 import { DarkPostprocess, createDarkPostprocess, createEffect } from "./postprocess.js";
 import { Allocations } from "./resources.js";
-import { PrismRuntime } from "./runtime.js";
 import { encodeLight, lightPipeline } from "./spectral_pass.js";
 import { RenderTarget } from "./targets.js";
 import { createWireframeDraw } from "./wireframe.js";
 import { darkWallClear } from "../../prism/src/color.js";
 import { dustUniforms } from "../../prism/src/dust.js";
-import { lightMeshLayout } from "../../prism/src/light_mesh.js";
 import { glassUniforms, sceneUniforms } from "../../prism/src/uniforms.js";
 
 import LIGHT from "../../../assets/prism-background/pipelines/dark/passes/light/light.wgsl";
@@ -34,36 +32,27 @@ function darkFrameDefault_default() {
   };
 }
 export async function createDarkGraph(device, runtime, settings) {
-  PrismRuntime.setLightMeshLayout(
-    runtime,
-    device,
-    settings.lowQuality ? lightMeshLayout(64, 12) : lightMeshLayout(128, 24),
-  );
-  const result = PrismRuntime.prepareEnvironment(runtime, device);
-  if (result.TAG === "Err") {
-    return result;
-  }
-  const value = await $settle(result._0);
+  const value = await $settle(runtime.environmentReady);
   if (value.TAG === "Err") {
     const error = value._0;
     return { TAG: "Err", _0: error.message };
   }
   const allocations = { textures: [], buffers: [] };
   const value$1 = await $settle(buildDarkGraph(device, runtime, settings, allocations));
-  let result$1;
+  let result;
   if (value$1.TAG === "Ok") {
-    result$1 = value$1._0;
+    result = value$1._0;
   } else {
     const error = value$1._0;
-    result$1 = { TAG: "Err", _0: error.message };
+    result = { TAG: "Err", _0: error.message };
   }
-  if (result$1.TAG === "Err") {
+  if (result.TAG === "Err") {
     Allocations.destroy(allocations);
   }
-  if (result$1.TAG === "Err") {
-    return result$1;
+  if (result.TAG === "Err") {
+    return result;
   }
-  const graph = result$1._0;
+  const graph = result._0;
   const value$2 = await $settle(DarkGraph.prepareWireframes(graph, device, runtime));
   let prepared;
   if (value$2.TAG === "Ok") {
@@ -135,9 +124,8 @@ async function buildDarkGraph(device, runtime, settings, allocations) {
   }
   const light = result._0;
   Allocations.retainBindings(allocations, light.values);
-  const studio = $unwrap(runtime.studioEnvironment, "environment prepared");
-  const studioView = studio.texture.createView();
-  const debugView = runtime.debugEnvironment?.texture.createView() ?? studioView;
+  const studioView = runtime.studioView;
+  const debugView = runtime.debugView;
   const shared = [
     {
       name: "studioEnvironment",
@@ -299,7 +287,6 @@ async function buildDarkGraph(device, runtime, settings, allocations) {
 export const DarkGraph = {
   async prepareWireframes(darkGraph, device, runtime) {
     if (runtime.state.controls.wireframe && darkGraph.wireframe == null) {
-      PrismRuntime.ensureWireframe(runtime, device);
       const value = [
         UniformInput.new("params", { viewProjection: runtime.state.view.viewProjection }),
       ];

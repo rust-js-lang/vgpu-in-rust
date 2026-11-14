@@ -64,3 +64,10 @@ preparation waits for their outcomes before rollback or transfer of ownership.
 BoundPipeline releases its allocated uniforms if native bind-group creation
 unwinds, then rethrows the original payload. Both connected graph variants are
 compared against actual upstream pipeline implementations in real GPU tests.
+
+PipelineController owns requested/active theme and quality, one preparation task,
+stale candidate destruction and deferred teardown. GraphInputs snapshots only
+preparation values and borrows runtime GPU handles; no mutable runtime borrow
+crosses asynchronous preparation. Quality layout changes are committed only at
+activation, so the previous scene remains usable while another prepares.
+PipelineQuality owns the shared high/low mesh dimensions and runtime capacity.
