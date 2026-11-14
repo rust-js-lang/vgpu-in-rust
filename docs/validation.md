@@ -12,10 +12,10 @@ see patches/rust-js for the patch and published replacements. No private compile
 The upstream nullable-promise, async-declaration, basic derived-Debug and native
 Error-family fixes are used unchanged.
 
-Passing application checks:
+Application evidence:
 
 - 32 native Rust tests and the same 32 compiled JavaScript tests.
-- 51 app tests with 453,218 assertions: scene optics, framing,
+- 53 app tests with 453,992 assertions: scene optics, framing,
   interaction, exact rounded mesh vertices/topology, exact Float32 camera
   matrices, spectral layouts/vertices/flux, retained upload identity, native
   RangeErrors, React markup/context, retained assets, bloom kernels/pairing and
@@ -32,11 +32,11 @@ Passing application checks:
   claimed.
 - Invalid uniform values allocate no GPU resource. Rejected updates preserve the
   previous upload, and valid updates retain the same buffer.
-- The latest run passes all 86 production-built Chromium checks. Earlier runs
-  exposed intermittent exact GPU graph differences, documented below. A green
-  run does not close that release investigation. Ten cover setup-tab parity, copy/reset,
+- The latest full run passes 91/92 production-built Chromium checks. The
+  intermittent exact light-graph comparison fails; details are recorded below.
+  Ten cover setup-tab parity, copy/reset,
   rapid transitions, layout stability, unavailable/denied clipboard, reduced
-  motion, mobile sizing and unmount cleanup. Sixty-four require a real WebGPU adapter:
+  motion, mobile sizing and unmount cleanup. Sixty-eight require a real WebGPU adapter:
   all 44 retained shaders compile; malformed shader diagnostics work; the Rust
   fullscreen pass copies exact pixels/orientation; the additive light pass
   renders red/blue spectral output and disappears with zero reveal; both glass
@@ -537,3 +537,49 @@ tests pass (32 each). No pixel tolerances or retries were introduced: the
 earlier GPU graph mismatch remains intermittent and is not claimed fixed by
 this successful run. Full React root/content and optional debug/performance
 integration, production build and Pages verification still remain.
+
+## React landing hero checkpoint
+
+Hero now retains the original markup, responsive classes, SVG wordmark, setup
+tabs and button variants. The button uses the same pinned CVA, Tailwind merge
+and Radix Slot implementations; 768 comparisons match original classes and SSR
+markup across variants, sizes, custom classes, forwarded attributes and Slot
+children. Six retained theme/application CSS files match upstream byte-for-byte.
+The original dependencies are pinned to their upstream lockfile versions.
+
+PrismBackground connects the compiled renderer to a React canvas effect,
+framing-element measurement and document class MutationObserver. The normal
+path selects the same dark/light wall colors, preloads light assets, preserves
+the live scene through theme preparation and disconnects/disposes on unmount.
+The optional debug graph, performance browser API and source-style per-theme
+module preloading remain port work; they are not claimed implemented here.
+
+Six browser cases pass: disabled canvas makes no adapter request; unavailable
+WebGPU preserves useful hero content/tabs and reports initialization once;
+desktop/mobile with initial dark/light all render real GPU output, follow a
+subsequent site-theme change and clean up. StrictMode exercises mount/unmount
+replay. Tracked devices are destroyed once, no commands follow destruction,
+and document-theme observers disconnect once. Pixel samples are copied at
+actual canvas submission: reading getCurrentTexture on a later idle rAF can
+return an empty fresh swapchain image even when the compositor correctly
+retains the last presented frame. The test no longer mistakes that for a
+blank image. The initial test also assumed wrong CLI/MCP copy; assertions now
+use the original exact accessible labels.
+
+The acceptance screenshots in docs/screenshots show the actual Rust GPU
+renderer inside the hero on desktop/mobile. The full navigation, remaining
+sections/live demos, footer, final font loading, optional debug/performance
+surfaces and production build/Pages deployment are still incomplete. Existing
+documentation links remain on the canonical upstream site, as in the earlier
+DocsLinksSection decision, since a documentation server is outside this Pages
+milestone.
+
+Current evidence: 53 app tests pass (453,992 assertions), strict rust-js Clippy
+passes, and all six hero checks pass. The full browser run passes 91/92 in
+14.2 s. The remaining failure is the high-quality single-sample light graph at
+tone-aces: five output bytes differ. Recorded packed input differences remain
+zero; the repeated actual frame changes 45/44/5 attachment bytes and then
+matches reference, while the reference redraw stays stable. This adds another
+observation to the unresolved GPU comparison investigation. No assertion was
+relaxed and no passing full browser gate is claimed. Core Rust was unchanged
+from the prior checkpoint’s 32 native/compiled checks.

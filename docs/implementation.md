@@ -81,10 +81,16 @@ the source's preparation-time origin. Scene graphs continue to own GPU passes.
 
 FrameHealthMonitor owns active-window accounting and refresh estimation;
 quality_signals owns GPU-tier and battery threshold decisions. The browser
-controller will consume these decisions without rebuilding policy in DOM code.
+controller consumes these decisions without rebuilding policy in DOM code.
 
 The browser consumes those pure policies through a deferred closure-based
 AutoQualityController. A generation cancels stale factories and callbacks;
 quality subscriptions use a native Set to preserve listener identity and live
 iteration. quality_logging owns the shared default console boundary without
 eagerly loading Auto policy or the vendor detector.
+
+PrismBackground owns the React canvas ref, document-theme observer and effect
+cleanup; BrowserRenderer continues to own native GPU lifecycle. Hero retains
+source layout and composes the existing tab/context/wordmark components. Button
+retains the native CVA/Tailwind/Radix boundaries and forwarded DOM attributes.
+The optional debug/performance React surfaces and final page shell remain work.

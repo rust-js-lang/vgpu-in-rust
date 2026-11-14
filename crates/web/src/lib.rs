@@ -43,4 +43,7 @@ pub mod capabilities;
 pub mod browser_renderer;
 
 pub mod auto_quality;
+pub mod button;
+pub mod hero;
+pub mod prism_background;
 pub mod quality_logging;

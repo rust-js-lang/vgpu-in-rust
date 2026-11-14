@@ -105,7 +105,7 @@ export interface RendererOptions {
     initialControls?: PrismControls | undefined;
     qualityLogger?: QualityLogger | undefined;
     loadAutoQuality?: (() => Promise<AutoQualityFactory>) | undefined;
-    onError: (value: any) => void;
+    onError: (error: any) => void;
 }
 
 export interface RendererStatus {

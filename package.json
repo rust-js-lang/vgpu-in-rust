@@ -18,9 +18,16 @@
   "dependencies": {
     "@pmndrs/detect-gpu": "6.0.20",
     "@rust-js/std": "file:rust-js/std",
+    "@vercel/geistdocs": "1.22.0",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "fumadocs-ui": "16.2.2",
     "lucide-react": "0.555.0",
+    "radix-ui": "1.6.7",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "tailwind-merge": "3.6.0",
+    "tw-animate-css": "1.4.0"
   },
   "devDependencies": {
     "@types/bun": "1.4.4",

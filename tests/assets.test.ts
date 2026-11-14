@@ -15,3 +15,10 @@ test('retained prism shader graph and fullscreen stage match their original sour
   const fullscreen=await import(resolve(upstream,'packages/vgpu-api/src/fullscreen-stage.ts'));
   expect(await Bun.file(resolve(root,'assets/vgpu/fullscreen.wgsl')).text()).toBe(fullscreen.FULLSCREEN_VERTEX_SOURCE);
 });
+
+
+test('retained landing theme and application styles match their original sources exactly',async()=>{
+ const app=resolve(upstream,'apps/docs/app');
+ for(const file of ['hero-theme.css','hero-glass-button.css','hero-solo.css'])expect(await Bun.file(resolve(root,'assets/styles',file)).text()).toBe(await Bun.file(resolve(app,'[lang]/(home)',file)).text());
+ for(const file of ['global.css','styles/geistdocs.css','styles/legacy-vgpu-tokens.css'])expect(await Bun.file(resolve(root,'assets/site',file)).text()).toBe(await Bun.file(resolve(app,file)).text());
+});
