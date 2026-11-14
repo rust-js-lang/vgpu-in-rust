@@ -9,6 +9,7 @@ import {
   requestPrismDevice,
 } from "./canvas_surface.js";
 import { PipelineController, createPipelineController } from "./pipeline_controller.js";
+import { defaultQualityLogger } from "./quality_logging.js";
 import { PrismRuntime, createPrismRuntime } from "./runtime.js";
 import { viewportWithinCanvas } from "../../prism/src/framing.js";
 import {
@@ -43,7 +44,11 @@ export function createRenderer(options) {
   const mobile = canMatchMedia ? window.matchMedia(MOBILE_QUERY) : undefined;
   const reducedMotion = canMatchMedia && window.matchMedia(REDUCED_QUERY).matches;
   const quality = QualityPreference.initialQuality(options.initialQuality);
+  const reason = options.initialQuality === "auto" ? "initial" : "forced";
   const renderer = {
+    qualityListeners: new Set(),
+    qualityLogger: options.qualityLogger ?? defaultQualityLogger(),
+    loadAutoQuality: options.loadAutoQuality,
     canvas: options.canvas,
     framingElement: options.framingElement,
     onError: options.onError,
@@ -55,6 +60,10 @@ export function createRenderer(options) {
       preference: options.initialQuality,
       requestedQuality: quality,
       effectiveQuality: quality,
+      requestedReason: reason,
+      effectiveReason: reason,
+      autoGeneration: 0,
+      autoScheduled: false,
       qualityTransition: 0,
       interaction: prismInteractionDefault.default(),
       mobile,
@@ -189,12 +198,19 @@ export const BrowserRenderer = {
       const state = $borrowMut(browserRenderer.state, true);
       if (!state.disposed) {
         const changed = state.effectiveQuality !== quality;
-        state.effectiveQuality = quality;
+        // Commit the matching requested reason only at activation.
+        // An older winning scene keeps its previous reason.
         state.pendingPresent = true;
         state.lastDustTime = -1;
         state.budget = 0;
         state.hasCappedFrame = false;
         $unborrow(state);
+        const state$1 = $borrow(browserRenderer.state, true);
+        const reason =
+          quality === state$1.requestedQuality ? state$1.requestedReason : state$1.effectiveReason;
+        $unborrow(state$1);
+        BrowserRenderer.setEffectiveQuality(browserRenderer, quality, reason);
+        BrowserRenderer.resetHealth(browserRenderer);
         if (changed) {
           BrowserRenderer.measureForQuality(browserRenderer, quality, false);
         }
@@ -256,15 +272,15 @@ export const BrowserRenderer = {
         (entries) => {
           const entry = entries.at(-1);
           if (entry != null) {
-            const state = $borrowMut(browserRenderer.state, true);
-            if (state.disposed) {
-              $unborrow(state);
+            const state$1 = $borrowMut(browserRenderer.state, true);
+            if (state$1.disposed) {
+              $unborrow(state$1);
               return;
             }
             try {
-              state.nearViewport = entry.isIntersecting;
+              state$1.nearViewport = entry.isIntersecting;
             } finally {
-              $unborrow(state);
+              $unborrow(state$1);
             }
             BrowserRenderer.reconcileLoop(browserRenderer);
           }
@@ -317,19 +333,19 @@ export const BrowserRenderer = {
     }
     const resize = () => BrowserRenderer.measure(browserRenderer);
     function visibility() {
-      const state = $borrowMut(browserRenderer.state, true);
-      if (!state.disposed) {
+      const state$1 = $borrowMut(browserRenderer.state, true);
+      if (!state$1.disposed) {
         try {
-          state.documentVisible = !document.hidden;
-          if (!state.documentVisible) {
-            PrismInteraction.onPointerLeave(state.interaction);
+          state$1.documentVisible = !document.hidden;
+          if (!state$1.documentVisible) {
+            PrismInteraction.onPointerLeave(state$1.interaction);
           }
         } finally {
-          $unborrow(state);
+          $unborrow(state$1);
         }
         BrowserRenderer.reconcileLoop(browserRenderer);
       } else {
-        $unborrow(state);
+        $unborrow(state$1);
         return;
       }
     }
@@ -403,6 +419,7 @@ export const BrowserRenderer = {
     }
     const framing = element != null ? $some(map(element)) : undefined;
     const dpr = BrowserRenderer.dpr(browserRenderer, quality);
+    BrowserRenderer.resetHealth(browserRenderer);
     const state = $borrowMut(browserRenderer.state, true);
     try {
       state.pendingSize = {
@@ -441,6 +458,7 @@ export const BrowserRenderer = {
     if (browserRenderer.state.disposed || size.width <= 0 || size.height <= 0) {
       return;
     }
+    BrowserRenderer.resetHealth(browserRenderer);
     $borrowMut(browserRenderer.state).pendingSize = size;
     BrowserRenderer.queueResize(browserRenderer);
   },
@@ -545,6 +563,7 @@ export const BrowserRenderer = {
         $unborrow(state);
         const start = tmp[0];
         const stop = tmp[1];
+        BrowserRenderer.resetHealth(browserRenderer);
         if (stop != null) {
           window.cancelAnimationFrame(stop);
         }
@@ -591,6 +610,7 @@ export const BrowserRenderer = {
       return;
     }
     const state = $borrowMut(browserRenderer.state, true);
+    let state$live = true;
     if (!state.disposed && state.running) {
       let now;
       try {
@@ -662,8 +682,33 @@ export const BrowserRenderer = {
       const dustTime = Math.floor(time * 30) / 30;
       const dustMoved =
         mode === "dark" && state.controls.view === "glass" && dustTime !== state.lastDustTime;
-      bb152: {
-        bb96: {
+      const dustAnimating = mode === "dark" && state.controls.view === "glass";
+      let tmp$1 = false;
+      if (updateScene || dustMoved || revealChanged || dustAnimating) {
+        if (state.preference === "auto") {
+          let tmp;
+          try {
+            tmp = PipelineController.activeQuality(controller) === "high";
+          } catch (error) {
+            $unborrow(state);
+            throw error;
+          }
+          if (tmp) {
+            if (state.documentVisible) {
+              tmp$1 = state.nearViewport;
+            }
+          }
+        }
+      }
+      const healthSample = {
+        deltaMs: delta * 1000,
+        active: tmp$1,
+        rendered: false,
+        mobile,
+        workload: dustAnimating && !updateScene && !revealChanged ? "dust" : "interactive",
+      };
+      bb194: {
+        bb130: {
           if (state.hasCappedFrame) {
             let isFinite;
             try {
@@ -689,21 +734,42 @@ export const BrowserRenderer = {
               const interval = 1 / tmp;
               state.budget = $f64Min(state.budget + delta, interval * 2);
               if (state.budget + 1e-9 < interval) {
-                break bb152;
+                state$live = false;
+                $unborrow(state);
+                BrowserRenderer.recordHealth(browserRenderer, { ...healthSample });
+                break bb194;
               }
               state.budget = $f64Max(state.budget - interval, 0);
-              break bb96;
+              break bb130;
             }
           }
           state.hasCappedFrame = true;
         }
-        if (updateScene || dustMoved || revealChanged) {
+        if (!updateScene && !dustMoved && !revealChanged) {
+          state$live = false;
+          $unborrow(state);
+          BrowserRenderer.recordHealth(browserRenderer, { ...healthSample });
+        } else {
           const stepAim = aim$1 == null ? aim$1 : aim$1.slice();
           const stepOrbit = orbit$1 == null ? orbit$1 : orbit$1.slice();
+          if (state.runtime == null) {
+            if (state$live) {
+              $unborrow(state);
+            }
+            throw new Error("runtime initialized");
+          }
+          const value = state.runtime;
+          let gpuCanvasContext;
+          try {
+            gpuCanvasContext = $unwrap(state.surface, "surface initialized").context;
+          } catch (error) {
+            if (state$live) {
+              $unborrow(state);
+            }
+            throw error;
+          }
           let tmp;
           try {
-            const prismRuntime = $unwrap(state.runtime, "runtime initialized");
-            const value = $unwrap(state.surface, "surface initialized").context;
             tmp = [
               {
                 time: dustTime,
@@ -713,13 +779,18 @@ export const BrowserRenderer = {
               },
               stepAim,
               stepOrbit,
-              prismRuntime,
               value,
+              gpuCanvasContext,
               $unwrap(state.device, "device initialized"),
             ];
-          } finally {
-            $unborrow(state);
+          } catch (error) {
+            if (state$live) {
+              $unborrow(state);
+            }
+            throw error;
           }
+          $unborrow(state);
+          state$live = false;
           const frame = tmp[0];
           const aim = tmp[1] == null ? tmp[1] : tmp[1].slice();
           const orbit = tmp[2] == null ? tmp[2] : tmp[2].slice();
@@ -753,19 +824,30 @@ export const BrowserRenderer = {
               ),
             )
           ) {
-            const state = $borrowMut(browserRenderer.state, true);
-            state.pendingPresent = false;
-            state.lastDustTime = frame.time;
-            state.lastReveal = frame.revealProgress;
-            state.lastBeam = frame.beamWidthReveal;
-            state.submittedFrames = (state.submittedFrames + 1) >>> 0;
-            $unborrow(state);
+            const state$1 = $borrowMut(browserRenderer.state, true);
+            state$1.pendingPresent = false;
+            state$1.lastDustTime = frame.time;
+            state$1.lastReveal = frame.revealProgress;
+            state$1.lastBeam = frame.beamWidthReveal;
+            state$1.submittedFrames = (state$1.submittedFrames + 1) >>> 0;
+            $unborrow(state$1);
+            BrowserRenderer.recordHealth(browserRenderer, {
+              rendered: true,
+              deltaMs: healthSample.deltaMs,
+              active: healthSample.active,
+              mobile: healthSample.mobile,
+              workload: healthSample.workload,
+            });
+            BrowserRenderer.scheduleAutoQuality(browserRenderer);
           }
           return;
         }
       }
     }
-    $unborrow(state);
+    if (state$live) {
+      $unborrow(state);
+    }
+    state$live = false;
   },
   setControls(browserRenderer, controls) {
     const state = $borrowMut(browserRenderer.state, true);
@@ -841,6 +923,7 @@ export const BrowserRenderer = {
     }
   },
   async setMode(browserRenderer, mode) {
+    BrowserRenderer.resetHealth(browserRenderer);
     const state = $borrowMut(browserRenderer.state, true);
     if (state.disposed) {
       $unborrow(state);
@@ -855,13 +938,14 @@ export const BrowserRenderer = {
     }
     const value = await $settle(PipelineController.setMode(controller, mode));
     if (value.TAG === "Ok") {
-      const state = $borrowMut(browserRenderer.state, true);
-      if (!state.disposed) {
-        state.pendingPresent = true;
-        state.lastDustTime = -1;
-        $unborrow(state);
+      const state$1 = $borrowMut(browserRenderer.state, true);
+      if (!state$1.disposed) {
+        state$1.pendingPresent = true;
+        state$1.lastDustTime = -1;
+        $unborrow(state$1);
+        BrowserRenderer.resetHealth(browserRenderer);
       } else {
-        $unborrow(state);
+        $unborrow(state$1);
         return;
       }
     } else {
@@ -876,72 +960,295 @@ export const BrowserRenderer = {
       throw error;
     }
   },
-  async setQualityPreference(browserRenderer, preference) {
-    const quality = QualityPreference.initialQuality(preference);
+  getQualityState(browserRenderer) {
+    const state = $borrow(browserRenderer.state, true);
+    $unborrow(state);
+    return {
+      preference: state.preference,
+      effective: state.effectiveQuality,
+      reason: state.effectiveReason,
+    };
+  },
+  emitQualityState(browserRenderer) {
+    const snapshot = BrowserRenderer.getQualityState(browserRenderer);
+    for (const listener of browserRenderer.qualityListeners.values()) {
+      listener({ ...snapshot });
+    }
+  },
+  setEffectiveQuality(browserRenderer, quality, reason) {
     const state = $borrowMut(browserRenderer.state, true);
-    if (state.disposed) {
+    if (state.effectiveQuality === quality && state.effectiveReason === reason) {
       $unborrow(state);
       return;
     }
-    const previous$1 = state.requestedQuality;
-    state.preference = preference;
-    state.requestedQuality = quality;
-    state.qualityTransition = (state.qualityTransition + 1) >>> 0;
+    state.effectiveQuality = quality;
+    state.effectiveReason = reason;
     $unborrow(state);
-    const transition = state.qualityTransition;
-    const previous = previous$1;
-    if (quality === "low") {
-      BrowserRenderer.measureForQuality(browserRenderer, quality, true);
-    }
+    BrowserRenderer.emitQualityState(browserRenderer);
+  },
+  subscribeQuality(browserRenderer, listener) {
     if (browserRenderer.state.borrows < 0) {
       $alreadyMutablyBorrowed();
     }
-    if (browserRenderer.state.controller == null) {
-      await BrowserRenderer.ready(browserRenderer);
+    if (browserRenderer.state.disposed) {
+      return () => {};
     }
-    if (browserRenderer.state.borrows < 0) {
-      $alreadyMutablyBorrowed();
+    browserRenderer.qualityListeners.add(listener);
+    const listeners = browserRenderer.qualityListeners;
+    return () => {
+      listeners.delete(listener);
+    };
+  },
+  recordHealth(browserRenderer, sample) {
+    const record = $borrow(browserRenderer.state).autoController?.recordFrame;
+    if (record != null) {
+      record({ ...sample });
     }
-    const { controller } = browserRenderer.state;
-    if (controller == null) {
-      return;
+  },
+  resetHealth(browserRenderer) {
+    const reset = $borrow(browserRenderer.state).autoController?.resetHealth;
+    if (reset != null) {
+      reset();
     }
-    const result = await $settle(PipelineController.setQuality(controller, quality));
-    if (browserRenderer.state.borrows < 0) {
-      $alreadyMutablyBorrowed();
+  },
+  cancelAutoQuality(browserRenderer) {
+    const state = $borrowMut(browserRenderer.state, true);
+    state.autoGeneration = (state.autoGeneration + 1) >>> 0;
+    state.autoScheduled = false;
+    const old = state.autoController;
+    state.autoController = undefined;
+    const old$1 = state.autoFrame;
+    state.autoFrame = undefined;
+    const old$2 = state.autoTask;
+    state.autoTask = undefined;
+    $unborrow(state);
+    const controller = old;
+    const frame = old$1;
+    const task = old$2;
+    if (controller != null) {
+      controller.dispose();
     }
+    if (frame != null) {
+      window.cancelAnimationFrame(frame);
+    }
+    if (task != null) {
+      clearTimeout(task);
+    }
+  },
+  scheduleAutoQuality(browserRenderer) {
+    const state = $borrowMut(browserRenderer.state, true);
     if (
-      browserRenderer.state.disposed ||
-      $borrow(browserRenderer.state).qualityTransition !== transition
+      !state.disposed &&
+      state.preference === "auto" &&
+      state.effectiveQuality === "high" &&
+      state.autoController == null &&
+      !state.autoScheduled
     ) {
+      state.autoScheduled = true;
+      const generation = state.autoGeneration;
+      $unborrow(state);
+      const frame = window.requestAnimationFrame(() => {
+        $borrowMut(browserRenderer.state).autoFrame = undefined;
+        const task = setTimeout(() => {
+          $borrowMut(browserRenderer.state).autoTask = undefined;
+          BrowserRenderer.startAutoQuality(browserRenderer, generation).then(
+            () => {},
+            () => {},
+          );
+        }, 0);
+        $borrowMut(browserRenderer.state).autoTask = task;
+      });
+      $borrowMut(browserRenderer.state).autoFrame = frame;
+    } else {
+      $unborrow(state);
       return;
+    }
+  },
+  autoIsCurrent(browserRenderer, generation) {
+    const state = $borrow(browserRenderer.state, true);
+    const result =
+      !state.disposed &&
+      state.autoGeneration === generation &&
+      state.preference === "auto" &&
+      state.effectiveQuality === "high";
+    $unborrow(state);
+    return result;
+  },
+  async startAutoQuality(browserRenderer, generation) {
+    let result;
+    if (browserRenderer.loadAutoQuality != null) {
+      const value = catchNative(() => browserRenderer.loadAutoQuality());
+      if (value.TAG === "Ok") {
+        const task = value._0;
+        result = await $settle(task);
+      } else {
+        const error = value._0;
+        result = { TAG: "Err", _0: error };
+      }
+    } else {
+      const result$1 = await $settle(
+        import("./auto_quality.js").then((m) => m.createAutoQualityController),
+      );
+      result = result$1.TAG === "Ok" ? { TAG: "Ok", _0: result$1._0 } : result$1;
     }
     if (result.TAG === "Ok") {
-      if (quality === "high") {
-        BrowserRenderer.measureForQuality(browserRenderer, quality, true);
+      const create = result._0;
+      if (!BrowserRenderer.autoIsCurrent(browserRenderer, generation)) {
+        return;
       }
-      const state = $borrowMut(browserRenderer.state, true);
-      state.effectiveQuality = quality;
-      state.pendingPresent = true;
-      state.lastDustTime = -1;
-      $unborrow(state);
+      $borrowMut(browserRenderer.state).autoScheduled = false;
+      const controller = create({
+        logger: browserRenderer.qualityLogger,
+        onDowngrade(reason) {
+          if (!BrowserRenderer.autoIsCurrent(browserRenderer, generation)) {
+            return;
+          }
+          BrowserRenderer.applyEffectiveQuality(browserRenderer, "low", reason, generation).then(
+            () => {},
+            () => {},
+          );
+        },
+      });
+      $borrowMut(browserRenderer.state).autoController = controller;
     } else {
-      const error = result._0;
-      $borrowMut(browserRenderer.state).requestedQuality = previous;
       if (browserRenderer.state.borrows < 0) {
         $alreadyMutablyBorrowed();
       }
-      const { effectiveQuality: effective } = browserRenderer.state;
-      PipelineController.setQuality(controller, effective).then(
-        () => {},
-        () => {},
-      );
-      if (quality === "low") {
-        BrowserRenderer.measureForQuality(browserRenderer, effective, true);
+      if (browserRenderer.state.autoGeneration === generation) {
+        $borrowMut(browserRenderer.state).autoScheduled = false;
       }
-      BrowserRenderer.reportRecoverable(browserRenderer, error);
-      throw error;
     }
+  },
+  async setQualityPreference(browserRenderer, preference) {
+    if (browserRenderer.state.borrows < 0) {
+      $alreadyMutablyBorrowed();
+    }
+    if (browserRenderer.state.disposed) {
+      return;
+    }
+    BrowserRenderer.cancelAutoQuality(browserRenderer);
+    const quality = QualityPreference.initialQuality(preference);
+    const reason = preference === "auto" ? "initial" : "forced";
+    const state = $borrowMut(browserRenderer.state, true);
+    state.preference = preference;
+    if (state.effectiveQuality === quality) {
+      state.effectiveReason = reason;
+    }
+    const generation = state.autoGeneration;
+    $unborrow(state);
+    BrowserRenderer.emitQualityState(browserRenderer);
+    await BrowserRenderer.applyEffectiveQuality(browserRenderer, quality, reason, generation);
+  },
+  async applyEffectiveQuality(browserRenderer, quality, reason, generation) {
+    const state = $borrowMut(browserRenderer.state, true);
+    if (!state.disposed && state.autoGeneration === generation) {
+      const previous$1 = state.requestedQuality;
+      const previousReason$1 = state.requestedReason;
+      state.requestedQuality = quality;
+      state.requestedReason = reason;
+      state.qualityTransition = (state.qualityTransition + 1) >>> 0;
+      $unborrow(state);
+      const transition = state.qualityTransition;
+      const previous = previous$1;
+      const previousReason = previousReason$1;
+      if (browserRenderer.state.borrows < 0) {
+        $alreadyMutablyBorrowed();
+      }
+      if (browserRenderer.state.controller == null) {
+        await BrowserRenderer.ready(browserRenderer);
+      }
+      const state$1 = $borrow(browserRenderer.state, true);
+      if (
+        !state$1.disposed &&
+        state$1.autoGeneration === generation &&
+        state$1.qualityTransition === transition
+      ) {
+        $unborrow(state$1);
+        if (browserRenderer.state.borrows < 0) {
+          $alreadyMutablyBorrowed();
+        }
+        const { controller } = browserRenderer.state;
+        if (controller == null) {
+          return;
+        }
+        if (
+          PipelineController.activeQuality(controller) === quality &&
+          PipelineController.requestedQuality(controller) === quality
+        ) {
+          BrowserRenderer.setEffectiveQuality(browserRenderer, quality, reason);
+          $borrowMut(browserRenderer.state).pendingPresent = true;
+          BrowserRenderer.resetHealth(browserRenderer);
+          return;
+        }
+        if (quality === "low") {
+          BrowserRenderer.measureForQuality(browserRenderer, quality, true);
+        }
+        const result = await $settle(PipelineController.setQuality(controller, quality));
+        const state = $borrow(browserRenderer.state, true);
+        if (
+          !state.disposed &&
+          state.autoGeneration === generation &&
+          state.qualityTransition === transition
+        ) {
+          $unborrow(state);
+          if (result.TAG === "Ok") {
+            if (quality === "high") {
+              BrowserRenderer.measureForQuality(browserRenderer, quality, true);
+            }
+            BrowserRenderer.setEffectiveQuality(browserRenderer, quality, reason);
+            const state$1 = $borrowMut(browserRenderer.state, true);
+            state$1.pendingPresent = true;
+            state$1.lastDustTime = -1;
+            let auto;
+            if (quality === "low") {
+              const old = state$1.autoController;
+              state$1.autoController = undefined;
+              auto = old;
+            } else {
+              auto = undefined;
+            }
+            $unborrow(state$1);
+            if (auto != null) {
+              auto.dispose();
+            }
+            if (quality === "low" && reason !== "forced") {
+              const details = {
+                preference: $borrow(browserRenderer.state).preference,
+                reason,
+                from: "high",
+                to: "low",
+                dpr: 1,
+              };
+              (0, browserRenderer.qualityLogger)("[Prism quality] Downgraded to Low.", details);
+            }
+            return;
+          }
+          const error = result._0;
+          const state$1 = $borrowMut(browserRenderer.state, true);
+          state$1.requestedQuality = previous;
+          state$1.requestedReason = previousReason;
+          $unborrow(state$1);
+          if (browserRenderer.state.borrows < 0) {
+            $alreadyMutablyBorrowed();
+          }
+          const { effectiveQuality: effective } = browserRenderer.state;
+          PipelineController.setQuality(controller, effective).then(
+            () => {},
+            () => {},
+          );
+          if (quality === "low") {
+            BrowserRenderer.measureForQuality(browserRenderer, effective, true);
+          }
+          BrowserRenderer.reportRecoverable(browserRenderer, error);
+          throw error;
+        }
+        $unborrow(state);
+        return;
+      }
+      $unborrow(state$1);
+      return;
+    }
+    $unborrow(state);
   },
   reportRecoverable(browserRenderer, error) {
     if (browserRenderer.state.borrows < 0) {
@@ -997,6 +1304,8 @@ export const BrowserRenderer = {
     };
   },
   dispose(browserRenderer) {
+    BrowserRenderer.cancelAutoQuality(browserRenderer);
+    browserRenderer.qualityListeners.clear();
     const state = $borrowMut(browserRenderer.state, true);
     let result;
     if (state.cleanup != null) {

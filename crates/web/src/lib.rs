@@ -41,3 +41,6 @@ pub mod canvas_surface;
 pub mod capabilities;
 
 pub mod browser_renderer;
+
+pub mod auto_quality;
+pub mod quality_logging;

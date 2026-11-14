@@ -15,7 +15,7 @@ Error-family fixes are used unchanged.
 Passing application checks:
 
 - 32 native Rust tests and the same 32 compiled JavaScript tests.
-- 51 app tests with 453,164 assertions: scene optics, framing,
+- 51 app tests with 453,218 assertions: scene optics, framing,
   interaction, exact rounded mesh vertices/topology, exact Float32 camera
   matrices, spectral layouts/vertices/flux, retained upload identity, native
   RangeErrors, React markup/context, retained assets, bloom kernels/pairing and
@@ -32,11 +32,11 @@ Passing application checks:
   claimed.
 - Invalid uniform values allocate no GPU resource. Rejected updates preserve the
   previous upload, and valid updates retain the same buffer.
-- The preceding canvas checkpoint passed all 69 production-built Chromium checks.
-  The latest run passes 67/69; two exact GPU graph comparisons fail, as documented
-  below. This is an open browser gate, not a green suite. Ten cover setup-tab parity, copy/reset,
+- The latest run passes all 86 production-built Chromium checks. Earlier runs
+  exposed intermittent exact GPU graph differences, documented below. A green
+  run does not close that release investigation. Ten cover setup-tab parity, copy/reset,
   rapid transitions, layout stability, unavailable/denied clipboard, reduced
-  motion, mobile sizing and unmount cleanup. Fifty-seven require a real WebGPU adapter:
+  motion, mobile sizing and unmount cleanup. Sixty-four require a real WebGPU adapter:
   all 44 retained shaders compile; malformed shader diagnostics work; the Rust
   fullscreen pass copies exact pixels/orientation; the additive light pass
   renders red/blue spectral output and disappears with zero reveal; both glass
@@ -104,7 +104,7 @@ The old child-startup race was reported as #1770 and is now fixed upstream.
 
 ## Remaining milestone gates
 
-Finish automatic quality policy and React canvas integration. Both assembled scene graphs
+Finish React canvas integration and optional debug/performance surfaces. Both assembled scene graphs
 are already GPU-verified. Finish the full
 landing root and every section. Compare full-page GPU output, themes,
 desktop/mobile framing, interaction, fallback and cleanup against upstream.
@@ -499,3 +499,41 @@ before attributing this to driver behavior or changing the oracle.
 
 These failures remain an explicit landing-page release gate. The pure policy
 checkpoint is published independently; no production deployment is claimed.
+
+## Live automatic quality integration checkpoint
+
+BrowserRenderer now defers the Auto controller until after a successful High
+frame, another rAF and a zero-delay task. The controller and vendor detector
+remain two distinct dynamic imports in generated JavaScript. Forced preference
+changes and disposal cancel scheduled work and invalidate older in-flight
+factories. Auto health accounts for skipped capped frames, ambient dust, mobile
+workloads, inactivity and resize/theme/quality resets. Quality state reports
+preference, effective pipeline and reason through listeners with native Set
+identity/removal semantics. Failed Low preparation restores the live High scene
+and DPR, reports once and remains recoverable.
+
+The advisory controller preserves the original Promise chains, including
+ordering of synchronous probe failures and removal of battery listeners after
+an immediate initial downgrade. Ten browser comparisons match actual upstream
+GPU/battery signals, failure logging, runtime health/reset, late disposal and
+listener identity. Six real-GPU renderer cases cover deferred loading, stale
+factory results, stale downgrade callbacks, import rejection/throw/retry,
+successful Low activation and failed Low preparation. A separate default-path
+case loads the actual 6.0.20 vendor detector after production frames, verifies
+same-origin benchmark requests and checks the 16-file asset manifest. Existing
+canvas parity cases now also compare quality state with upstream.
+
+The benchmark staging script retains the upstream inventory and hashes, takes
+the exact version from package.json and stages the pinned vendor tables as
+same-origin public assets during setup/compile. Its --check mode passes. These
+are generated data, ignored by Git; production builds must run setup/compile.
+The benchmark URL is page-relative so a GitHub Pages base path is preserved.
+Vendor tier types include SSR and BENCHMARK_FETCH_FAILED as declared by the
+installed library; the pure predicate comparisons include them.
+
+Current checks: 86/86 browser tests pass (21.7 s), 51 app tests with 453,218
+assertions pass, strict rust-js Clippy passes (5.89 s), and native/compiled core
+tests pass (32 each). No pixel tolerances or retries were introduced: the
+earlier GPU graph mismatch remains intermittent and is not claimed fixed by
+this successful run. Full React root/content and optional debug/performance
+integration, production build and Pages verification still remain.

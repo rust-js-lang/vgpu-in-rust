@@ -3,9 +3,11 @@
 import type { PrismControls, PrismTheme } from "../../prism/src/controls.js";
 import type { NormalizedViewport } from "../../prism/src/framing.js";
 import type { PrismInteraction } from "../../prism/src/interaction.js";
-import type { PipelineQuality, QualityPreference } from "../../prism/src/quality.js";
+import type { PipelineQuality, QualityPreference, QualityReason, QualityState } from "../../prism/src/quality.js";
+import type { AutoQualityController, AutoQualityOptions } from "./auto_quality.js";
 import type { CanvasSurface } from "./canvas_surface.js";
 import type { PipelineController } from "./pipeline_controller.js";
+import type { QualityLogger } from "./quality_logging.js";
 import type { PrismRuntime } from "./runtime.js";
 
 interface Listeners {
@@ -29,6 +31,13 @@ interface RendererState {
     preference: QualityPreference;
     requestedQuality: PipelineQuality;
     effectiveQuality: PipelineQuality;
+    requestedReason: QualityReason;
+    effectiveReason: QualityReason;
+    autoGeneration: number;
+    autoFrame?: number | undefined;
+    autoTask?: number | object | undefined;
+    autoScheduled: boolean;
+    autoController?: AutoQualityController | undefined;
     qualityTransition: number;
     interaction: PrismInteraction;
     mobile?: MediaQueryList | undefined;
@@ -63,7 +72,12 @@ export interface RenderSize {
     dpr: number;
 }
 
+export type AutoQualityFactory = (options: AutoQualityOptions) => AutoQualityController;
+
 export interface BrowserRenderer {
+    qualityListeners: Set<(state: QualityState) => void>;
+    qualityLogger: QualityLogger;
+    loadAutoQuality?: (() => Promise<AutoQualityFactory>) | undefined;
     canvas: HTMLCanvasElement;
     framingElement?: HTMLElement | undefined;
     onError: (value: any) => void;
@@ -76,6 +90,8 @@ export const BrowserRenderer: {
     setControls(browserRenderer: BrowserRenderer, controls: PrismControls): void;
     invalidate(browserRenderer: BrowserRenderer): void;
     setMode(browserRenderer: BrowserRenderer, mode: PrismTheme): Promise<void>;
+    getQualityState(browserRenderer: BrowserRenderer): QualityState;
+    subscribeQuality(browserRenderer: BrowserRenderer, listener: (state: QualityState) => void): () => void;
     setQualityPreference(browserRenderer: BrowserRenderer, preference: QualityPreference): Promise<void>;
     status(browserRenderer: BrowserRenderer): RendererStatus;
     dispose(browserRenderer: BrowserRenderer): Promise<undefined>;
@@ -87,6 +103,8 @@ export interface RendererOptions {
     initialMode: PrismTheme;
     initialQuality: QualityPreference;
     initialControls?: PrismControls | undefined;
+    qualityLogger?: QualityLogger | undefined;
+    loadAutoQuality?: (() => Promise<AutoQualityFactory>) | undefined;
     onError: (value: any) => void;
 }
 

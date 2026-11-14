@@ -1,6 +1,10 @@
 //! Advisory Auto-quality decisions from performance/auto-quality.ts.
 #[derive(Clone, Copy, PartialEq)]
 pub enum GpuTierType {
+    #[cfg_attr(rust_js, rust_js::name = "SSR")]
+    Ssr,
+    #[cfg_attr(rust_js, rust_js::name = "BENCHMARK_FETCH_FAILED")]
+    BenchmarkFetchFailed,
     #[cfg_attr(rust_js, rust_js::name = "BLOCKLISTED")]
     Blocklisted,
     #[cfg_attr(rust_js, rust_js::name = "BENCHMARK")]

@@ -21,6 +21,7 @@ for(const mobile of [false,true])for(const reduced of [false,true])test('native 
     const errors:string[]=[],sourceErrors:string[]=[];const controls=f.defaultPrismControls();
     const actual=f.createRenderer({canvas:canvases[0],framingElement:framing,initialMode:'dark',initialQuality:'high',initialControls:controls,onError:(error:any)=>errors.push(String(error))});
     const original=ref.createRenderer({canvas:canvases[1],framingElement:framing,initialMode:'dark',initialQuality:'high',initialControls:controls,onError:(error:any)=>sourceErrors.push(String(error))});
+    const qualityStates:any[]=[];
     const comparisons:Array<{stage:string,different:number,nonzero:number,size:number[]}>=[];
     async function image(canvas:HTMLCanvasElement){
       const context=canvas.getContext('webgpu')!,device=context.getConfiguration()!.device;
@@ -33,6 +34,7 @@ for(const mobile of [false,true])for(const reduced of [false,true])test('native 
       }finally{buffer.destroy();}
     }
     async function compare(stage:string){
+      qualityStates.push({stage,actual:f.BrowserRenderer.getQualityState(actual),expected:original.getQualityState()});
       if(canvases[0].width!==canvases[1].width||canvases[0].height!==canvases[1].height)throw Error('Canvas size mismatch');
       const [a,b]=await Promise.all([image(canvases[0]),image(canvases[1])]);let different=0,nonzero=0;
       for(let i=0;i<a.length;i++){if(a[i]!==b[i])different++;if(i%4!==3&&a[i]>0)nonzero++;}
@@ -55,13 +57,14 @@ for(const mobile of [false,true])for(const reduced of [false,true])test('native 
       await compare('settled');const before=f.BrowserRenderer.status(actual).submittedFrames;
       for(let index=121;index<=141;index++)await advance(3083.334+index*16.667);
       const idleFrames=f.BrowserRenderer.status(actual).submittedFrames-before;
-      return {comparisons,errors,sourceErrors,idleFrames,status:f.BrowserRenderer.status(actual),mobile};
+      return {comparisons,qualityStates,errors,sourceErrors,idleFrames,status:f.BrowserRenderer.status(actual),mobile};
     }catch(error){throw Error(JSON.stringify({stage,errors,sourceErrors,status:f.BrowserRenderer.status(actual),error:String(error)}));}finally{
       await f.BrowserRenderer.dispose(actual);original.dispose();
       canvases.forEach(canvas=>canvas.remove());framing.remove();window.requestAnimationFrame=raf;window.cancelAnimationFrame=caf;
       Object.defineProperty(performance,'now',{configurable:true,value:clock});
     }
   },{mobile});
+  for(const state of report.qualityStates)expect(state.actual,state.stage).toEqual(state.expected);
   expect(report.errors).toEqual([]);expect(report.sourceErrors).toEqual([]);
   for(const comparison of report.comparisons){expect(comparison.different,JSON.stringify(comparison)).toBe(0);if(comparison.stage==='settled')expect(comparison.nonzero).toBeGreaterThan(100);}
   expect(report.status.quality).toBe('low');expect(report.status.size).toEqual([160,100]);

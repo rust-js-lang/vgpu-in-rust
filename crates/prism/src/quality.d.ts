@@ -13,3 +13,11 @@ export type QualityPreference = "auto" | "high" | "low";
 export const QualityPreference: {
     initialQuality(qualityPreference: QualityPreference): PipelineQuality;
 };
+
+export type QualityReason = "initial" | "forced" | "gpu-tier" | "battery" | "runtime";
+
+export interface QualityState {
+    preference: QualityPreference;
+    effective: PipelineQuality;
+    reason: QualityReason;
+}

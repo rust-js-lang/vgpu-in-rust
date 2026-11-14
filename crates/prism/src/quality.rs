@@ -33,3 +33,23 @@ impl QualityPreference {
         }
     }
 }
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum QualityReason {
+    #[cfg_attr(rust_js, rust_js::name = "initial")]
+    Initial,
+    #[cfg_attr(rust_js, rust_js::name = "forced")]
+    Forced,
+    #[cfg_attr(rust_js, rust_js::name = "gpu-tier")]
+    GpuTier,
+    #[cfg_attr(rust_js, rust_js::name = "battery")]
+    Battery,
+    #[cfg_attr(rust_js, rust_js::name = "runtime")]
+    Runtime,
+}
+#[derive(Clone, Copy, PartialEq)]
+pub struct QualityState {
+    pub preference: QualityPreference,
+    pub effective: PipelineQuality,
+    pub reason: QualityReason,
+}

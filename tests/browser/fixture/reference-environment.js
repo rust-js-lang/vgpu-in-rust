@@ -33,3 +33,5 @@ export {sceneUniforms as runtimeSceneUniforms,glassUniforms as runtimeGlassUnifo
 export {lightWallUniforms,lightCausticUniforms} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/light/uniforms.ts';
 
 export {lightPresentUniforms} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/light/uniforms.ts';
+
+export {createPrismAutoQualityController} from '@reference/app/[lang]/(home)/components/prism-background/performance/auto-quality.ts';

@@ -7,7 +7,7 @@ expect(revision.exitCode).toBe(0);
 expect(revision.stdout.toString().trim()).toBe("773351f8c96d1cbec28155c0e36ae3efd1cba135");
 const ref=await import(root+'/apps/docs/app/[lang]/(home)/components/prism-background/performance/auto-quality.ts');
 test('GPU tier and battery advisory decisions preserve source boundaries',()=>{
- for(const type of ['BLOCKLISTED','BENCHMARK','FALLBACK','WEBGL_UNSUPPORTED'] as const) for(const tier of [-1,0,1,1.00001,2,3,NaN,Infinity,-Infinity]) for(const isMobile of [undefined,false,true]) {
+ for(const type of ['SSR','BENCHMARK_FETCH_FAILED','BLOCKLISTED','BENCHMARK','FALLBACK','WEBGL_UNSUPPORTED'] as const) for(const tier of [-1,0,1,1.00001,2,3,NaN,Infinity,-Infinity]) for(const isMobile of [undefined,false,true]) {
   const signal={type,tier,isMobile};expect(gpuTierRequestsLow(signal)).toBe(ref.gpuTierRequestsLow(signal));
  }
  expect(batteryRequestsLow(undefined)).toBe(ref.batteryRequestsLow(undefined));

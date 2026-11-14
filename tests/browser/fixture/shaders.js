@@ -78,3 +78,5 @@ Object.assign(window.shaderFixture,{RuntimeState,lightWallUniforms,lightCausticU
 
 import {lightPresentUniforms} from '../../../crates/prism/src/light_uniforms.js';
 Object.assign(window.shaderFixture,{lightPresentUniforms});
+
+Object.assign(window.shaderFixture,{autoQuality:()=>import('../../../crates/web/src/auto_quality.js')});

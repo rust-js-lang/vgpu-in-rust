@@ -1,4 +1,7 @@
 //! Browser canvas lifecycle from prism-background/renderer.ts.
+use crate::auto_quality::{
+    AutoQualityController, AutoQualityOptions, create_auto_quality_controller,
+};
 use crate::canvas_surface::{
     CanvasSurface, catch_native, checked, create_canvas_surface, request_prism_device,
 };
@@ -6,8 +9,9 @@ use crate::dark_graph::DarkFrame;
 use crate::pipeline_controller::{
     ControllerOptions, PipelineController, create_pipeline_controller,
 };
+use crate::quality_logging::{QualityLogger, default_quality_logger};
 use crate::runtime::{PrismRuntime, create_prism_runtime};
-use js::{JsError, Promise};
+use js::{JsError, Promise, TimeoutId};
 use react::webapi::{
     Event, EventTargetExt, GPUDevice, HTMLCanvasElement, HTMLElement, IntersectionObserver,
     IntersectionObserverInit, MediaQueryList, PointerEvent, ResizeObserver, document, events,
@@ -16,10 +20,11 @@ use react::webapi::{
 use std::cell::RefCell;
 use std::rc::Rc;
 use vgpu_prism::controls::{PrismControls, PrismTheme, PrismView};
+use vgpu_prism::frame_health::{FrameHealthSample, FrameWorkload};
 use vgpu_prism::framing::{NormalizedViewport, RectLike, viewport_within_canvas};
 use vgpu_prism::interaction::{PrismInteraction, automatic_pointer_position};
 use vgpu_prism::presentation::hero_reveal_progress;
-use vgpu_prism::quality::{PipelineQuality, QualityPreference};
+use vgpu_prism::quality::{PipelineQuality, QualityPreference, QualityReason, QualityState};
 
 const MOBILE_QUERY: &str = "(max-width: 767px)";
 const REDUCED_QUERY: &str = "(prefers-reduced-motion: reduce)";
@@ -50,6 +55,13 @@ struct RendererState {
     preference: QualityPreference,
     requested_quality: PipelineQuality,
     effective_quality: PipelineQuality,
+    requested_reason: QualityReason,
+    effective_reason: QualityReason,
+    auto_generation: u32,
+    auto_frame: Option<f64>,
+    auto_task: Option<&'static TimeoutId>,
+    auto_scheduled: bool,
+    auto_controller: Option<AutoQualityController>,
     quality_transition: u32,
     interaction: PrismInteraction,
     mobile: Option<&'static MediaQueryList>,
@@ -77,7 +89,11 @@ struct RendererState {
     has_capped_frame: bool,
     submitted_frames: u32,
 }
+pub type AutoQualityFactory = fn(AutoQualityOptions) -> AutoQualityController;
 pub struct BrowserRenderer {
+    quality_listeners: &'static js::Set<dyn Fn(QualityState)>,
+    quality_logger: QualityLogger,
+    load_auto_quality: Option<Rc<dyn Fn() -> Promise<AutoQualityFactory>>>,
     canvas: &'static HTMLCanvasElement,
     framing_element: Option<&'static HTMLElement>,
     on_error: Rc<dyn Fn(&'static JsError)>,
@@ -89,6 +105,8 @@ pub struct RendererOptions {
     pub initial_mode: PrismTheme,
     pub initial_quality: QualityPreference,
     pub initial_controls: Option<PrismControls>,
+    pub quality_logger: Option<QualityLogger>,
+    pub load_auto_quality: Option<Rc<dyn Fn() -> Promise<AutoQualityFactory>>>,
     pub on_error: Rc<dyn Fn(&'static JsError)>,
 }
 pub struct RendererStatus {
@@ -104,7 +122,17 @@ pub fn create_renderer(options: RendererOptions) -> Rc<BrowserRenderer> {
     let mobile = can_match_media.then(|| window.match_media(MOBILE_QUERY));
     let reduced_motion = can_match_media && window.match_media(REDUCED_QUERY).matches();
     let quality = options.initial_quality.initial_quality();
+    let reason = if options.initial_quality == QualityPreference::Auto {
+        QualityReason::Initial
+    } else {
+        QualityReason::Forced
+    };
     let renderer = Rc::new(BrowserRenderer {
+        quality_listeners: js::set::new(None),
+        quality_logger: options
+            .quality_logger
+            .unwrap_or_else(default_quality_logger),
+        load_auto_quality: options.load_auto_quality,
         canvas: options.canvas,
         framing_element: options.framing_element,
         on_error: options.on_error,
@@ -122,6 +150,13 @@ pub fn create_renderer(options: RendererOptions) -> Rc<BrowserRenderer> {
             preference: options.initial_quality,
             requested_quality: quality,
             effective_quality: quality,
+            requested_reason: reason,
+            effective_reason: reason,
+            auto_generation: 0,
+            auto_frame: None,
+            auto_task: None,
+            auto_scheduled: false,
+            auto_controller: None,
             quality_transition: 0,
             interaction: PrismInteraction::default(),
             mobile,
@@ -222,13 +257,24 @@ impl BrowserRenderer {
                             return;
                         }
                         let changed = state.effective_quality != quality;
-                        state.effective_quality = quality;
+                        // Commit the matching requested reason only at activation.
+                        // An older winning scene keeps its previous reason.
                         state.pending_present = true;
                         state.last_dust_time = -1.0;
                         state.budget = 0.0;
                         state.has_capped_frame = false;
                         changed
                     };
+                    let reason = {
+                        let state = on_activate.state.borrow();
+                        if quality == state.requested_quality {
+                            state.requested_reason
+                        } else {
+                            state.effective_reason
+                        }
+                    };
+                    on_activate.set_effective_quality(quality, reason);
+                    on_activate.reset_health();
                     if changed {
                         on_activate.measure_for_quality(quality, false);
                     }
@@ -404,6 +450,7 @@ impl BrowserRenderer {
             )
         });
         let dpr = self.dpr(quality);
+        self.reset_health();
         {
             let mut state = self.state.borrow_mut();
             state.pending_size = Some(RenderSize {
@@ -428,6 +475,7 @@ impl BrowserRenderer {
         if self.state.borrow().disposed || size.width <= 0.0 || size.height <= 0.0 {
             return;
         }
+        self.reset_health();
         self.state.borrow_mut().pending_size = Some(size);
         self.queue_resize();
     }
@@ -509,6 +557,7 @@ impl BrowserRenderer {
                 (false, state.frame.take())
             }
         };
+        self.reset_health();
         if let Some(frame) = stop {
             window.cancel_animation_frame(frame);
         }
@@ -534,7 +583,8 @@ impl BrowserRenderer {
         }
         self.schedule_frame();
     }
-    fn paint_frame(&self) {
+    fn paint_frame(self: &Rc<Self>) {
+        let health_sample;
         let controller = self.state.borrow().controller.clone();
         let Some(controller) = controller else {
             return;
@@ -578,6 +628,23 @@ impl BrowserRenderer {
             let dust_moved = mode == PrismTheme::Dark
                 && state.controls.view == PrismView::Glass
                 && dust_time != state.last_dust_time;
+            let dust_animating =
+                mode == PrismTheme::Dark && state.controls.view == PrismView::Glass;
+            health_sample = FrameHealthSample {
+                delta_ms: delta * 1000.0,
+                active: (update_scene || dust_moved || reveal_changed || dust_animating)
+                    && state.preference == QualityPreference::Auto
+                    && controller.active_quality() == Some(PipelineQuality::High)
+                    && state.document_visible
+                    && state.near_viewport,
+                rendered: false,
+                mobile,
+                workload: if dust_animating && !update_scene && !reveal_changed {
+                    FrameWorkload::Dust
+                } else {
+                    FrameWorkload::Interactive
+                },
+            };
             if state.has_capped_frame && delta.is_finite() && delta > 0.0 {
                 let interval = 1.0
                     / if mobile {
@@ -589,6 +656,8 @@ impl BrowserRenderer {
                     };
                 state.budget = (state.budget + delta).min(interval * 2.0);
                 if state.budget + 1e-9 < interval {
+                    drop(state);
+                    self.record_health(health_sample);
                     return;
                 }
                 state.budget = (state.budget - interval).max(0.0);
@@ -596,6 +665,8 @@ impl BrowserRenderer {
                 state.has_capped_frame = true;
             }
             if !update_scene && !dust_moved && !reveal_changed {
+                drop(state);
+                self.record_health(health_sample);
                 return;
             }
             (
@@ -625,6 +696,12 @@ impl BrowserRenderer {
             state.last_reveal = frame.reveal_progress;
             state.last_beam = frame.beam_width_reveal;
             state.submitted_frames += 1;
+            drop(state);
+            self.record_health(FrameHealthSample {
+                rendered: true,
+                ..health_sample
+            });
+            self.schedule_auto_quality();
         }
     }
     pub fn set_controls(&self, controls: PrismControls) {
@@ -647,6 +724,7 @@ impl BrowserRenderer {
         }
     }
     pub async fn set_mode(self: Rc<Self>, mode: PrismTheme) {
+        self.reset_health();
         let controller = {
             let mut state = self.state.borrow_mut();
             if state.disposed {
@@ -667,6 +745,8 @@ impl BrowserRenderer {
                 }
                 state.pending_present = true;
                 state.last_dust_time = -1.0;
+                drop(state);
+                self.reset_health();
             }
             Err(error) => {
                 if self.state.borrow().disposed {
@@ -677,45 +757,279 @@ impl BrowserRenderer {
             }
         }
     }
-    pub async fn set_quality_preference(self: Rc<Self>, preference: QualityPreference) {
-        let quality = preference.initial_quality();
-        let (transition, previous) = {
+    pub fn get_quality_state(&self) -> QualityState {
+        let state = self.state.borrow();
+        QualityState {
+            preference: state.preference,
+            effective: state.effective_quality,
+            reason: state.effective_reason,
+        }
+    }
+    fn emit_quality_state(&self) {
+        let snapshot = self.get_quality_state();
+        for listener in self.quality_listeners.values() {
+            listener(snapshot);
+        }
+    }
+    fn set_effective_quality(&self, quality: PipelineQuality, reason: QualityReason) {
+        {
             let mut state = self.state.borrow_mut();
-            if state.disposed {
+            if state.effective_quality == quality && state.effective_reason == reason {
+                return;
+            }
+            state.effective_quality = quality;
+            state.effective_reason = reason;
+        }
+        self.emit_quality_state();
+    }
+    pub fn subscribe_quality(
+        self: &Rc<Self>,
+        listener: &'static dyn Fn(QualityState),
+    ) -> Rc<dyn Fn()> {
+        if self.state.borrow().disposed {
+            return Rc::new(|| {});
+        }
+        self.quality_listeners.add(listener);
+        let listeners = self.quality_listeners;
+        Rc::new(move || {
+            listeners.delete(listener);
+        })
+    }
+    fn record_health(&self, sample: FrameHealthSample) {
+        let record = self
+            .state
+            .borrow()
+            .auto_controller
+            .as_ref()
+            .map(|controller| Rc::clone(&controller.record_frame));
+        if let Some(record) = record {
+            record(sample);
+        }
+    }
+    fn reset_health(&self) {
+        let reset = self
+            .state
+            .borrow()
+            .auto_controller
+            .as_ref()
+            .map(|controller| Rc::clone(&controller.reset_health));
+        if let Some(reset) = reset {
+            reset();
+        }
+    }
+    fn cancel_auto_quality(&self) {
+        let (controller, frame, task) = {
+            let mut state = self.state.borrow_mut();
+            state.auto_generation += 1;
+            state.auto_scheduled = false;
+            (
+                state.auto_controller.take(),
+                state.auto_frame.take(),
+                state.auto_task.take(),
+            )
+        };
+        if let Some(controller) = controller {
+            (controller.dispose)();
+        }
+        if let Some(frame) = frame {
+            window.cancel_animation_frame(frame);
+        }
+        if let Some(task) = task {
+            js::clear_timeout(Some(task));
+        }
+    }
+    fn schedule_auto_quality(self: &Rc<Self>) {
+        let generation = {
+            let mut state = self.state.borrow_mut();
+            if state.disposed
+                || state.preference != QualityPreference::Auto
+                || state.effective_quality != PipelineQuality::High
+                || state.auto_controller.is_some()
+                || state.auto_scheduled
+            {
+                return;
+            }
+            state.auto_scheduled = true;
+            state.auto_generation
+        };
+        let renderer = Rc::clone(self);
+        let frame = window.request_animation_frame(Box::new(move |_| {
+            renderer.state.borrow_mut().auto_frame = None;
+            let deferred = Rc::clone(&renderer);
+            let task = js::set_timeout(
+                move || {
+                    deferred.state.borrow_mut().auto_task = None;
+                    let _: Promise<()> =
+                        js::promise(Rc::clone(&deferred).start_auto_quality(generation))
+                            .then_with(|_| (), |_| ());
+                },
+                Some(0.0),
+            );
+            renderer.state.borrow_mut().auto_task = Some(task);
+        }));
+        self.state.borrow_mut().auto_frame = Some(frame);
+    }
+    fn auto_is_current(&self, generation: u32) -> bool {
+        let state = self.state.borrow();
+        !state.disposed
+            && state.auto_generation == generation
+            && state.preference == QualityPreference::Auto
+            && state.effective_quality == PipelineQuality::High
+    }
+    async fn start_auto_quality(self: Rc<Self>, generation: u32) {
+        let result = match &self.load_auto_quality {
+            Some(load) => match catch_native(|| load()) {
+                Ok(task) => js::settle(task).await,
+                Err(error) => Err(error),
+            },
+            None => js::settle(js::import!(create_auto_quality_controller))
+                .await
+                .map(|create| create as AutoQualityFactory),
+        };
+        if let Ok(create) = result {
+            if !self.auto_is_current(generation) {
+                return;
+            }
+            self.state.borrow_mut().auto_scheduled = false;
+            let downgrade = Rc::clone(&self);
+            let controller = create(AutoQualityOptions {
+                logger: Some(Rc::clone(&self.quality_logger)),
+                navigator: None,
+                load_gpu_tier: None,
+                on_downgrade: Rc::new(move |reason| {
+                    if !downgrade.auto_is_current(generation) {
+                        return;
+                    }
+                    let _: Promise<()> =
+                        js::promise(Rc::clone(&downgrade).apply_effective_quality(
+                            PipelineQuality::Low,
+                            reason,
+                            generation,
+                        ))
+                        .then_with(|_| (), |_| ());
+                }),
+            });
+            self.state.borrow_mut().auto_controller = Some(controller);
+        } else if self.state.borrow().auto_generation == generation {
+            self.state.borrow_mut().auto_scheduled = false;
+        }
+    }
+    pub async fn set_quality_preference(self: Rc<Self>, preference: QualityPreference) {
+        if self.state.borrow().disposed {
+            return;
+        }
+        self.cancel_auto_quality();
+        let quality = preference.initial_quality();
+        let reason = if preference == QualityPreference::Auto {
+            QualityReason::Initial
+        } else {
+            QualityReason::Forced
+        };
+        let generation = {
+            let mut state = self.state.borrow_mut();
+            state.preference = preference;
+            if state.effective_quality == quality {
+                state.effective_reason = reason;
+            }
+            state.auto_generation
+        };
+        self.emit_quality_state();
+        self.apply_effective_quality(quality, reason, generation)
+            .await;
+    }
+    async fn apply_effective_quality(
+        self: Rc<Self>,
+        quality: PipelineQuality,
+        reason: QualityReason,
+        generation: u32,
+    ) {
+        let (transition, previous, previous_reason) = {
+            let mut state = self.state.borrow_mut();
+            if state.disposed || state.auto_generation != generation {
                 return;
             }
             let previous = state.requested_quality;
-            state.preference = preference;
+            let previous_reason = state.requested_reason;
             state.requested_quality = quality;
+            state.requested_reason = reason;
             state.quality_transition += 1;
-            (state.quality_transition, previous)
+            (state.quality_transition, previous, previous_reason)
         };
-        if quality == PipelineQuality::Low {
-            self.measure_for_quality(quality, true);
-        }
         if self.state.borrow().controller.is_none() {
             self.ready().await;
+        }
+        {
+            let state = self.state.borrow();
+            if state.disposed
+                || state.auto_generation != generation
+                || state.quality_transition != transition
+            {
+                return;
+            }
         }
         let controller = self.state.borrow().controller.clone();
         let Some(controller) = controller else {
             return;
         };
-        let result = js::settle(controller.set_quality(quality)).await;
-        if self.state.borrow().disposed || self.state.borrow().quality_transition != transition {
+        if controller.active_quality() == Some(quality) && controller.requested_quality() == quality
+        {
+            self.set_effective_quality(quality, reason);
+            self.state.borrow_mut().pending_present = true;
+            self.reset_health();
             return;
+        }
+        if quality == PipelineQuality::Low {
+            self.measure_for_quality(quality, true);
+        }
+        let result = js::settle(controller.set_quality(quality)).await;
+        {
+            let state = self.state.borrow();
+            if state.disposed
+                || state.auto_generation != generation
+                || state.quality_transition != transition
+            {
+                return;
+            }
         }
         match result {
             Ok(()) => {
                 if quality == PipelineQuality::High {
                     self.measure_for_quality(quality, true);
                 }
-                let mut state = self.state.borrow_mut();
-                state.effective_quality = quality;
-                state.pending_present = true;
-                state.last_dust_time = -1.0;
+                self.set_effective_quality(quality, reason);
+                let auto = {
+                    let mut state = self.state.borrow_mut();
+                    state.pending_present = true;
+                    state.last_dust_time = -1.0;
+                    if quality == PipelineQuality::Low {
+                        state.auto_controller.take()
+                    } else {
+                        None
+                    }
+                };
+                if let Some(auto) = auto {
+                    (auto.dispose)();
+                }
+                if quality == PipelineQuality::Low && reason != QualityReason::Forced {
+                    let details = DowngradeLog {
+                        preference: self.state.borrow().preference,
+                        reason,
+                        from: PipelineQuality::High,
+                        to: PipelineQuality::Low,
+                        dpr: 1.0,
+                    };
+                    (self.quality_logger)(
+                        "[Prism quality] Downgraded to Low.",
+                        js::unknown(&details),
+                    );
+                }
             }
             Err(error) => {
-                self.state.borrow_mut().requested_quality = previous;
+                {
+                    let mut state = self.state.borrow_mut();
+                    state.requested_quality = previous;
+                    state.requested_reason = previous_reason;
+                }
                 let effective = self.state.borrow().effective_quality;
                 let _: Promise<()> = controller.set_quality(effective).then_with(|_| (), |_| ());
                 if quality == PipelineQuality::Low {
@@ -764,6 +1078,8 @@ impl BrowserRenderer {
         }
     }
     pub fn dispose(self: &Rc<Self>) -> Promise<()> {
+        self.cancel_auto_quality();
+        self.quality_listeners.clear();
         let (
             controller,
             runtime,
@@ -846,3 +1162,13 @@ impl BrowserRenderer {
         cleanup
     }
 }
+
+struct DowngradeLog {
+    preference: QualityPreference,
+    reason: QualityReason,
+    from: PipelineQuality,
+    to: PipelineQuality,
+    dpr: f64,
+}
+// SAFETY: the log payload is always an ordinary JavaScript object.
+unsafe impl js::Defined for DowngradeLog {}

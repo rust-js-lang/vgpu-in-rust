@@ -5,14 +5,15 @@
   "type": "module",
   "packageManager": "bun@1.4.4",
   "scripts": {
-    "setup": "bun run patch:compiler && bun install --frozen-lockfile --force && bun install --cwd rust-js --frozen-lockfile --ignore-scripts",
-    "compile": "bun run patch:compiler && bun rust-js/tooling/cli.js build --package vgpu-prism --package vgpu-web",
+    "setup": "bun run patch:compiler && bun install --frozen-lockfile --force && bun install --cwd rust-js --frozen-lockfile --ignore-scripts && bun run assets:prepare",
+    "compile": "bun run patch:compiler && bun run assets:prepare && bun rust-js/tooling/cli.js build --package vgpu-prism --package vgpu-web",
     "test:native": "cargo test --locked -p vgpu-prism",
     "test:parity": "bun test tests/parity.test.ts",
     "test:compiled": "bun rust-js/tooling/cli.js test --package vgpu-prism",
     "test": "bun test ./tests/*.test.ts",
     "test:browser": "bunx --bun playwright test",
-    "patch:compiler": "bun scripts/patch-rust-js.ts"
+    "patch:compiler": "bun scripts/patch-rust-js.ts",
+    "assets:prepare": "bun scripts/prepare-prism-gpu-benchmarks.mjs"
   },
   "dependencies": {
     "@pmndrs/detect-gpu": "6.0.20",

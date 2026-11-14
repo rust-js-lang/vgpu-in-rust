@@ -6,3 +6,5 @@
 *.js.map
 *.jsx.map
 .DS_Store
+
+/public/prism-gpu-benchmarks/
