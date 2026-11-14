@@ -13,8 +13,8 @@ Error-family fixes are used unchanged.
 
 Passing application checks:
 
-- 24 native Rust tests and the same 24 compiled JavaScript tests.
-- 38 app tests with 157,800 assertions: scene optics, framing,
+- 26 native Rust tests and the same 26 compiled JavaScript tests.
+- 40 app tests with 160,463 assertions: scene optics, framing,
   interaction, exact rounded mesh vertices/topology, exact Float32 camera
   matrices, spectral layouts/vertices/flux, retained upload identity, native
   RangeErrors, React markup/context, retained assets, bloom kernels/pairing and
@@ -31,9 +31,9 @@ Passing application checks:
   claimed.
 - Invalid uniform values allocate no GPU resource. Rejected updates preserve the
   previous upload, and valid updates retain the same buffer.
-- 23 production-built Chromium checks. Ten cover setup-tab parity, copy/reset,
+- 27 production-built Chromium checks. Ten cover setup-tab parity, copy/reset,
   rapid transitions, layout stability, unavailable/denied clipboard, reduced
-  motion, mobile sizing and unmount cleanup. Thirteen require a real WebGPU adapter:
+  motion, mobile sizing and unmount cleanup. Seventeen require a real WebGPU adapter:
   all 44 retained shaders compile; malformed shader diagnostics work; the Rust
   fullscreen pass copies exact pixels/orientation; the additive light pass
   renders red/blue spectral output and disappears with zero reveal; both glass
@@ -193,3 +193,45 @@ probe. The new code has no allow attribute or source workaround.
 Particles, light-theme rendering, runtime/lifecycle integration, the full page
 and public deployment remain required. The broad compiler gate history above
 is not replaced by a claim that the complete gate passed on this pin.
+
+## Retained runtime and particles checkpoint
+
+Rust now owns the complete typed numeric control normalization, shared range
+catalog, retained camera/framing/optical state and native GPU runtime resources.
+Normalization compares every numeric field against upstream across finite,
+out-of-range, NaN and infinite inputs and preserves the caller's records. The
+complete Rust schema is used by application callers; this is not a claim of a
+complete JavaScript SDK or historical Fast Refresh object compatibility API.
+
+Independent upstream state transitions compare responsive fit, viewport epsilon,
+orbit, lamp aim, resize, camera controls and presentation-only changes. GPU
+Float32 matrices and every resulting spectral upload match exactly; ideal f64
+basis vectors use the existing tight camera tolerance. Native and compiled Rust
+also prove whole-orbit rounded-prism containment and unchanged-state identities.
+
+The native runtime reserves the original high-tier vertex capacity, reuses its
+GPU buffer and scratch storage across updates and quality changes, and creates
+wireframes lazily. Studio/debug preparation returns the same pending, fulfilled
+or rejected promise. An injected studio failure waits for a deliberately held
+debug bake to complete before propagation. Every owned and temporary GPU texture
+and buffer is checked to be destroyed exactly once on cleanup.
+
+The 2,200-instance dust pass uses the original unchanged deterministic WGSL.
+Actual upstream draws match every output byte at times 0, 3.2, 9.7 and 1,000,000,
+and with zero/partial/full reveal. Distinct animation checksums prove time is
+effective; zero reveal renders no dust. Animation retains the camera matrix and
+allocates no new GPU uniform buffer.
+
+All 40 app tests, 27 production browser tests and 26 native/compiled Rust tests
+pass. Default rust-js-aware Clippy exits successfully; only #1784's four known
+false-positive warnings remain, with no suppression. Clippy's fixed-size chunk
+suggestion uses idiomatic as_chunks successfully on the published compiler.
+
+Generated lampAt gains one conservative struct copy after normalization makes
+that struct mutable elsewhere. Behavior remains correct; the output-precision
+observation is sent to the upstream support agent. No source workaround applied.
+
+Still required: assemble the retained draws into both complete scene graphs,
+light-theme materials/shadows, the canvas/frame-loop and React lifecycle, the
+full landing content, production build, local completion gates and public Pages
+deployment. This checkpoint does not complete the landing milestone.

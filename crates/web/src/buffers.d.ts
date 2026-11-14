@@ -13,4 +13,4 @@ export function createUniformBuffer(device: GPUDevice, layout: HostShareableLayo
 /** Validation failures leave the retained buffer and its previous values alone. */
 export function writeUniformBuffer(resource: UniformBuffer, queue: GPUQueue, value?: unknown | null | undefined): any;
 
-export function createVertexBuffer(device: GPUDevice, vertices: Float32Array<ArrayBuffer>, label: string): GPUBuffer;
+export function createVertexBuffer(device: GPUDevice, vertices: Float32Array<ArrayBuffer>, label: string, capacityBytes?: number | null | undefined): GPUBuffer;

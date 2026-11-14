@@ -10,3 +10,5 @@ export {buildLightMesh} from '@reference/app/[lang]/(home)/components/prism-back
 
 export {bloomBlurUniforms} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/dark/passes/bloom/uniforms.ts';
 export {bloomSpread} from '@reference/app/[lang]/(home)/components/prism-background/pipelines/dark/passes/bloom/config.ts';
+
+export {PRISM_TRIANGLE,PRISM_FRONT_Z,PRISM_LIGHT_PLANE_Z} from '@reference/app/[lang]/(home)/components/prism-background/types.ts';

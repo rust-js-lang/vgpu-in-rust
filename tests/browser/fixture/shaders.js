@@ -39,3 +39,10 @@ Object.assign(window.shaderFixture,{wallExtent});
 
 import {createDarkPostprocess,DarkPostprocess} from '../../../crates/web/src/postprocess.js';
 Object.assign(window.shaderFixture,{createDarkPostprocess,DarkPostprocess});
+
+import {dustUniforms} from '../../../crates/prism/src/dust.js';
+import {createDustDraw,DustDraw} from '../../../crates/web/src/dust.js';
+Object.assign(window.shaderFixture,{dustUniforms,createDustDraw,DustDraw});
+
+import {createPrismRuntime,PrismRuntime} from '../../../crates/web/src/runtime.js';
+Object.assign(window.shaderFixture,{createPrismRuntime,PrismRuntime});

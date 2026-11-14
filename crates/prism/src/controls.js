@@ -9,7 +9,7 @@ export const ByTheme = {
   },
 };
 export const prismControlsDefault = { default: prismControlsDefault_default };
-function prismControlsDefault_default() {
+export function prismControlsDefault_default() {
   return {
     dispersion: "stylized",
     spectralDispersion: {

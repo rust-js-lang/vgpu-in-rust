@@ -20,7 +20,7 @@ pub fn create_prism_geometry(device: &GPUDevice, label: &str, wireframe: bool) -
         mesh.indices
     };
     let indices = js::uint16_array::from(&index_data);
-    let vertices = create_vertex_buffer(device, vertices, &format!("{label}.vertices"));
+    let vertices = create_vertex_buffer(device, vertices, &format!("{label}.vertices"), None);
     let index_buffer = device.create_buffer(GPUBufferDescriptor {
         label: Some(&format!("{label}.indices")),
         size: indices.byte_length(),

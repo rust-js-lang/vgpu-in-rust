@@ -52,10 +52,11 @@ pub fn create_vertex_buffer(
     device: &GPUDevice,
     vertices: &Float32Array,
     label: &str,
+    capacity_bytes: Option<f64>,
 ) -> &'static GPUBuffer {
     let buffer = device.create_buffer(GPUBufferDescriptor {
         label: Some(label),
-        size: vertices.byte_length(),
+        size: capacity_bytes.unwrap_or_else(|| vertices.byte_length()),
         usage: f64::from(gpu_buffer_usage::VERTEX | gpu_buffer_usage::COPY_DST),
         mapped_at_creation: None,
     });

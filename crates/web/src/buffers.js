@@ -37,10 +37,10 @@ export function writeUniformBuffer(resource, queue, value) {
   return { TAG: "Ok" };
 }
 
-export function createVertexBuffer(device, vertices, label) {
+export function createVertexBuffer(device, vertices, label, capacityBytes) {
   const buffer = device.createBuffer({
     label,
-    size: vertices.byteLength,
+    size: capacityBytes ?? vertices.byteLength,
     usage: (GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST) >>> 0,
   });
   device.queue.writeBuffer(buffer, 0, vertices);

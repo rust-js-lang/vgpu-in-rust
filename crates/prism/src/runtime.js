@@ -15,7 +15,7 @@ export function incidenceAt(position, beamMouseY) {
 }
 
 export function lampAt(position, beamWidth, targetPosition, beamMouseY) {
-  return lampForIncidence(incidenceAt(position, beamMouseY), beamWidth, targetPosition);
+  return lampForIncidence(incidenceAt(position, { ...beamMouseY }), beamWidth, targetPosition);
 }
 
 export function wallExtent(aspect, cameraDistance, cameraFov, framing) {
