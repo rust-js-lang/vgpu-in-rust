@@ -97,7 +97,8 @@ function SourceCard() {
           <span className="text-red-800 dark:text-[#ff518d]">from</span>{" "}
           <span className="text-green-800 dark:text-[#00ca52]">"vgpu"</span>
           {";\n\n"}
-          <span className="text-red-800 dark:text-[#ff518d]">const</span> eve ={" "}
+          <span className="text-red-800 dark:text-[#ff518d]">const</span>
+          {" eve = "}
           <span className="text-purple-800 dark:text-[#c472fb]">effect</span>
           {"(gpu, eveWgsl);\neve."}
           <span className="text-purple-800 dark:text-[#c472fb]">draw</span>

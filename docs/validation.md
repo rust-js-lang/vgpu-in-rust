@@ -5,14 +5,8 @@ React leaves and GPU building blocks; they do not prove a completed landing page
 
 ## Current checkpoint
 
-The published rust-js gitlink is
-`7977d6f205090e273de0601e0425fa233ae38e9f` (2026-11-14), including all
-previous fixes and #1794 at 77a03e8e5. The submodule is unmodified and no active
-patch remains. The full app now compiles; 65 app tests (454,327 assertions),
-strict rust-js Clippy, 32 native and 32 compiled core tests, and seven upstream imported-props regressions pass.
-See docs/checkpoint.md for output-card evidence and docs/proposals for the
-inactive HIR prototype requested by upstream. Application results below are
-historical hero/renderer checkpoints unless explicitly updated.
+The published rust-js gitlink is `3ba28b44e2ccac37a6ee61dcabffd573bf6d5a33` (2026-11-14), including vendor CSSProperties fix #1806. A tracked correction for JSX whitespace/child identity (#1807) remains until upstream publication. See docs/checkpoint.md for the current shader editor proof and exact remaining release gates. The full browser run is 110/113 in 40.7s; all ten new shader-demo checks pass, while three prism GPU comparisons still fail. Strict rust-js Clippy and 32 native/32 compiled core tests pass. Results below are historical checkpoints unless explicitly updated.
+
 The upstream nullable-promise, async-declaration, basic derived-Debug and native
 Error-family fixes are used unchanged.
 

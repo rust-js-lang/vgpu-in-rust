@@ -5,8 +5,8 @@
   "type": "module",
   "packageManager": "bun@1.4.4",
   "scripts": {
-    "setup": "bun install --frozen-lockfile --force && bun install --cwd rust-js --frozen-lockfile --ignore-scripts && bun run assets:prepare",
-    "compile": "bun run assets:prepare && bun rust-js/tooling/cli.js build --package vgpu-prism --package vgpu-web",
+    "setup": "bun install --frozen-lockfile --force && bun install --cwd rust-js --frozen-lockfile --ignore-scripts && bun run assets:prepare && bun scripts/apply-rust-js-patches.ts",
+    "compile": "bun scripts/apply-rust-js-patches.ts && bun run assets:prepare && bun rust-js/tooling/cli.js build --package vgpu-prism --package vgpu-web",
     "test:native": "cargo test --locked -p vgpu-prism",
     "test:parity": "bun test tests/parity.test.ts",
     "test:compiled": "bun rust-js/tooling/cli.js test --package vgpu-prism",

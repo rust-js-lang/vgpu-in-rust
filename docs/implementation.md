@@ -94,3 +94,5 @@ cleanup; BrowserRenderer continues to own native GPU lifecycle. Hero retains
 source layout and composes the existing tab/context/wordmark components. Button
 retains the native CVA/Tailwind/Radix boundaries and forwarded DOM attributes.
 The optional debug/performance React surfaces and final page shell remain work.
+
+ShaderCodeScalesDemo owns the original source editor and visibility/intersection effects. ShaderPreview owns the on-demand DPR-1 GPU surface, reflected resolution uniform, coalesced ResizeObserver scheduling and rollback. Both immediate and async fullscreen paths use one descriptor owner. Original WGSL and the poster CSS remain assets; no upstream application TypeScript enters the production module graph. Full SDK Error subclasses remain upstream #1808; native failure causes are retained in the interim.

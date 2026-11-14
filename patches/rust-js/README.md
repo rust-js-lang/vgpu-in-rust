@@ -1,10 +1,9 @@
 # Compiler fixes adopted upstream
 
 The published submodule gitlink is the authority for the compiler revision.
-All application patches are retired: the Battery API fix is published at
-618662df7 (#1790), and imported JSX props are fixed at 77a03e8e5 (#1794).
-The app now uses published 7977d6f205090e273de0601e0425fa233ae38e9f with no
-downstream compiler source changes or patch-application helper.
+Published compiler: `3ba28b44e2ccac37a6ee61dcabffd573bf6d5a33`. All earlier patches are retired, including vendor CSSProperties (#1806).
+
+Active: [#1807](https://github.com/rust-js-lang/rust-js/issues/1807), `1807-jsx-whitespace.patch`, preserves explicit string whitespace and React child boundaries during JSX formatting. It contains the printer fix and two native React regressions, each observed red before the fix. Setup and compile apply tracked patches automatically and recognize an already-applied patch. Remove this patch and helper once the upstream correctness fix is adopted.
 
 The team requested the alternative HIR resolver prototype for follow-up glob
 coverage. It is retained as an [inactive review proposal](../../docs/proposals/README.md),
@@ -23,6 +22,7 @@ not applied to the app or its compiler.
 | #1786 guarded classification of known binding casts | 4c58cdcf6 |
 | #1790 Battery Status API and ambient declarations | 618662df7 |
 | #1794 imported JSX props and literal foreign props | 77a03e8e5 |
+| #1806 vendor-prefixed React CSS properties | 3ba28b44e |
 
 Claude relayed #1786 through agent-hub. Its published implementation replaces
 the last patch, downstream mutation and patch-application helper. Unknown

@@ -22,3 +22,8 @@ test('retained landing theme and application styles match their original sources
  for(const file of ['hero-theme.css','hero-glass-button.css','hero-solo.css'])expect(await Bun.file(resolve(root,'assets/styles',file)).text()).toBe(await Bun.file(resolve(app,'[lang]/(home)',file)).text());
  for(const file of ['global.css','styles/geistdocs.css','styles/legacy-vgpu-tokens.css'])expect(await Bun.file(resolve(root,'assets/site',file)).text()).toBe(await Bun.file(resolve(app,file)).text());
 });
+
+test("retained landing shader preview modules match upstream byte-for-byte",async()=>{
+ const source=resolve(upstream,"apps/docs/app/[lang]/(home)/components/shader-code-scales");
+ for(const file of ["main.wgsl","color.wgsl"])expect(await Bun.file(resolve(root,"assets/landing/shader-code-scales",file)).bytes()).toEqual(await Bun.file(resolve(source,file)).bytes());
+});

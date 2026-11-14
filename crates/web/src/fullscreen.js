@@ -16,7 +16,17 @@ export function fullscreenVertex(device) {
 
 /** The fullscreen effect pipeline: one triangle, no vertex buffers or depth. */
 export async function fullscreenPipeline(device, vertex, fragment, format, sampleCount, label) {
-  return await device.createRenderPipelineAsync({
+  return await withPipelineDescriptor(vertex, fragment, format, sampleCount, label, (descriptor) =>
+    device.createRenderPipelineAsync(descriptor),
+  );
+}
+
+/**
+ * Build the shared descriptor once for the native synchronous and asynchronous
+ * compilation paths. The callback consumes stack-borrowed color targets.
+ */
+function withPipelineDescriptor(vertex, fragment, format, sampleCount, label, create) {
+  return create({
     label,
     layout: "auto",
     vertex: {
@@ -30,6 +40,13 @@ export async function fullscreenPipeline(device, vertex, fragment, format, sampl
       targets: [{ format }],
     },
   });
+}
+
+/** Synchronous compilation, as vgpu's immediate effect draw uses. */
+export function fullscreenPipelineSync(device, vertex, fragment, format, sampleCount, label) {
+  return withPipelineDescriptor(vertex, fragment, format, sampleCount, label, (descriptor) =>
+    device.createRenderPipeline(descriptor),
+  );
 }
 
 /** Encodes one effect into the caller's frame. The frame owns submission. */

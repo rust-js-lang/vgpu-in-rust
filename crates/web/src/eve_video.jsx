@@ -75,7 +75,9 @@ export function EveVideo() {
           />
         </span>
         <span className="font-mono text-[9px] tabular-nums text-white/55">
-          {formatTime(currentTime)} / {formatTime(duration)}
+          {formatTime(currentTime)}
+          {" / "}
+          {formatTime(duration)}
         </span>
       </div>
     </div>

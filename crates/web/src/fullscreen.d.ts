@@ -6,5 +6,8 @@ export function fullscreenVertex(device: GPUDevice): GPUShaderModule;
 /** The fullscreen effect pipeline: one triangle, no vertex buffers or depth. */
 export function fullscreenPipeline(device: GPUDevice, vertex: GPUShaderModule, fragment: GPUShaderModule, format: string, sampleCount: number, label: string): Promise<GPURenderPipeline>;
 
+/** Synchronous compilation, as vgpu's immediate effect draw uses. */
+export function fullscreenPipelineSync(device: GPUDevice, vertex: GPUShaderModule, fragment: GPUShaderModule, format: string, sampleCount: number, label: string): GPURenderPipeline;
+
 /** Encodes one effect into the caller's frame. The frame owns submission. */
 export function encodeFullscreen(pass: GPURenderPassEncoder, pipeline: GPURenderPipeline, bindings: GPUBindGroup): void;

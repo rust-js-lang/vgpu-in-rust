@@ -24,7 +24,10 @@ export function DocsLinksSection() {
         {DOC_LINKS.map(([href, title, description]) => (
           <a key={href} href={`https://vgpu.sh/en${href}`} className="interactive-card p-6">
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-pretty text-gray-1000">{title} →</h3>
+              <h3 className="text-pretty text-gray-1000">
+                {title}
+                {" →"}
+              </h3>
             </div>
             <p className="text-pretty text-sm text-gray-900">
               <InlineCode text={description} />
@@ -33,11 +36,11 @@ export function DocsLinksSection() {
         ))}
       </div>
       <p className="mt-6 text-pretty text-sm text-gray-900">
-        Building agent tooling? Read the{" "}
+        {"Building agent tooling? Read the "}
         <a className="underline" href="https://vgpu.sh/en/docs/examples-api">
           vgpu Examples API reference
-        </a>{" "}
-        or inspect its{" "}
+        </a>
+        {" or inspect its "}
         <a className="underline" href="https://vgpu.sh/openapi.json">
           OpenAPI 3.1 description
         </a>

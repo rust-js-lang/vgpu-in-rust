@@ -51,3 +51,8 @@ pub mod hero;
 pub mod one_shader_every_surface;
 pub mod prism_background;
 pub mod quality_logging;
+
+pub mod shader_preview;
+
+pub mod shader_code_scales_demo;
+pub mod shader_code_scales_section;
