@@ -63,12 +63,14 @@ test('Rust fullscreen encoding draws the original copy effect with exact pixel o
       const shader=Object.entries(fixture.sources).find(([name])=>name.endsWith('/shared/presentation/copy-linear.wgsl'))![1];
       const fragment=fixture.shaderModule(device,shader,'copy-linear');
       const vertex=fixture.fullscreenVertex(device);
-      const pipeline=await fixture.fullscreenPipeline(device,vertex,fragment,'rgba8unorm','pixel-copy');
+      const pipeline=await fixture.fullscreenPipeline(device,vertex,fragment,'rgba8unorm',1,'pixel-copy');
       const pixels=new Uint8Array([255,0,0,255, 0,255,0,255, 0,0,255,255, 85,170,34,255]);
       device.queue.writeTexture({texture:source},pixels,{bytesPerRow:8},[2,2]);
       const bindings=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:source.createView()}]});
       const encoder=device.createCommandEncoder();
-      fixture.encodeFullscreen(encoder,pipeline,bindings,output.createView(),false);
+      const pass=encoder.beginRenderPass({colorAttachments:[{view:output.createView(),loadOp:'clear',storeOp:'store'}]});
+      fixture.encodeFullscreen(pass,pipeline,bindings);
+      pass.end();
       encoder.copyTextureToBuffer({texture:output},{buffer:readback,bytesPerRow:256},[2,2]);
       device.queue.submit([encoder.finish()]);
       await readback.mapAsync(GPUMapMode.READ);
@@ -121,7 +123,9 @@ test('Rust additive light pass rasterizes the generated spectral mesh and obeys 
       async function frame(){
         pack();
         const encoder=device.createCommandEncoder();
-        fixture.encodeLight(encoder,pipeline,bindings,vertices,mesh.vertexCount,output.createView(),false);
+        const pass=encoder.beginRenderPass({colorAttachments:[{view:output.createView(),loadOp:'clear',storeOp:'store'}]});
+        fixture.encodeLight(pass,pipeline,bindings,vertices,0,mesh.vertexCount);
+        pass.end();
         encoder.copyTextureToBuffer({texture:output},{buffer:readback,bytesPerRow:1024},[256,128]);
         device.queue.submit([encoder.finish()]);
         await readback.mapAsync(GPUMapMode.READ);

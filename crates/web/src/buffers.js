@@ -13,13 +13,17 @@ export function createUniformBuffer(device, layout, value, label) {
     return result;
   }
   const bytes = result._0;
+  return { TAG: "Ok", _0: createPackedUniformBuffer(device, layout, bytes, label) };
+}
+
+export function createPackedUniformBuffer(device, layout, bytes, label) {
   const buffer = device.createBuffer({
     label,
     size: bytes.byteLength,
     usage: (GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST) >>> 0,
   });
   device.queue.writeBuffer(buffer, 0, bytes);
-  return { TAG: "Ok", _0: { buffer, layout } };
+  return { buffer, layout };
 }
 
 /** Validation failures leave the retained buffer and its previous values alone. */

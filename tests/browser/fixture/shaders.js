@@ -22,3 +22,17 @@ Object.assign(window.shaderFixture,{createUniformBuffer,writeUniformBuffer,creat
 
 import {glassPipeline,encodeGlass} from '../../../crates/web/src/glass_pass.js';
 Object.assign(window.shaderFixture,{glassPipeline,encodeGlass});
+
+import {createEnvironmentTexture,createEnvironmentSampler,EnvironmentTexture} from '../../../crates/web/src/environment.js';
+import {createRenderTarget,RenderTarget} from '../../../crates/web/src/targets.js';
+import {prepareShaderBindings,ShaderBindings} from '../../../crates/web/src/bindings.js';
+Object.assign(window.shaderFixture,{createEnvironmentTexture,createEnvironmentSampler,EnvironmentTexture,
+  createRenderTarget,RenderTarget,prepareShaderBindings,ShaderBindings,
+  referenceEnvironment:()=>import('./reference-environment.js')});
+
+import {createPrismGeometry,PrismBuffers} from '../../../crates/web/src/geometry.js';
+import {cameraView} from '../../../crates/prism/src/camera.js';
+Object.assign(window.shaderFixture,{createPrismGeometry,PrismBuffers,cameraView});
+
+import {wallExtent} from '../../../crates/prism/src/runtime.js';
+Object.assign(window.shaderFixture,{wallExtent});

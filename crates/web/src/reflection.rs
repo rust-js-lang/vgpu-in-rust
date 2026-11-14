@@ -16,6 +16,11 @@ impl ShaderReflection {
 pub struct BindingInfo(PhantomData<JsObject>);
 
 impl BindingInfo {
+    #[cfg_attr(rust_js, rust_js::link_name = "get addressSpace")]
+    pub fn address_space(&self) -> Option<String> {
+        unreachable!()
+    }
+
     #[cfg_attr(rust_js, rust_js::link_name = "get group")]
     pub fn group(&self) -> f64 {
         unreachable!()

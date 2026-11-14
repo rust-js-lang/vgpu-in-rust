@@ -2,7 +2,7 @@
 //! WGSL reflection defines uniforms; browser WebIDL defines resource flags.
 use crate::packing::{PackingError, try_pack};
 use crate::reflection::HostShareableLayout;
-use js::{Float32Array, Unknown};
+use js::{ArrayBuffer, Float32Array, Unknown};
 use react::webapi::{GPUBuffer, GPUBufferDescriptor, GPUDevice, GPUQueue, gpu_buffer_usage};
 
 pub struct UniformBuffer {
@@ -18,6 +18,15 @@ pub fn create_uniform_buffer(
     label: &str,
 ) -> Result<UniformBuffer, PackingError> {
     let bytes = try_pack(layout, value)?;
+    Ok(create_packed_uniform_buffer(device, layout, bytes, label))
+}
+
+pub(crate) fn create_packed_uniform_buffer(
+    device: &GPUDevice,
+    layout: &'static HostShareableLayout,
+    bytes: &ArrayBuffer,
+    label: &str,
+) -> UniformBuffer {
     let buffer = device.create_buffer(GPUBufferDescriptor {
         label: Some(label),
         size: bytes.byte_length(),
@@ -25,7 +34,7 @@ pub fn create_uniform_buffer(
         mapped_at_creation: None,
     });
     device.queue().write_buffer(buffer, 0, bytes, None, None);
-    Ok(UniformBuffer { buffer, layout })
+    UniformBuffer { buffer, layout }
 }
 
 /// Validation failures leave the retained buffer and its previous values alone.

@@ -4,7 +4,7 @@
 export function fullscreenVertex(device: GPUDevice): GPUShaderModule;
 
 /** The fullscreen effect pipeline: one triangle, no vertex buffers or depth. */
-export function fullscreenPipeline(device: GPUDevice, vertex: GPUShaderModule, fragment: GPUShaderModule, format: string, label: string): Promise<GPURenderPipeline>;
+export function fullscreenPipeline(device: GPUDevice, vertex: GPUShaderModule, fragment: GPUShaderModule, format: string, sampleCount: number, label: string): Promise<GPURenderPipeline>;
 
 /** Encodes one effect into the caller's frame. The frame owns submission. */
-export function encodeFullscreen(encoder: GPUCommandEncoder, pipeline: GPURenderPipeline, bindings: GPUBindGroup, output: GPUTextureView, load: boolean): void;
+export function encodeFullscreen(pass: GPURenderPassEncoder, pipeline: GPURenderPipeline, bindings: GPUBindGroup): void;

@@ -47,20 +47,10 @@ export async function lightPipeline(device, source, format, label) {
  * Encodes into the frame's current light target; frame submission stays owned
  * by the graph, so later bloom and glass passes can consume this exact output.
  */
-export function encodeLight(encoder, pipeline, scene, vertices, vertexCount, output, load) {
-  const pass = encoder.beginRenderPass({
-    colorAttachments: [
-      {
-        view: output,
-        loadOp: load ? "load" : "clear",
-        storeOp: "store",
-      },
-    ],
-  });
+export function encodeLight(pass, pipeline, scene, vertices, firstVertex, vertexCount) {
   pass.setPipeline(pipeline);
   pass.setBindGroup(0, scene);
   pass.setVertexBuffer(0, vertices);
-  pass.draw(vertexCount);
-  pass.end();
+  pass.draw(vertexCount, undefined, firstVertex);
 }
 //# sourceMappingURL=spectral_pass.js.map

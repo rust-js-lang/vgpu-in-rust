@@ -8,4 +8,4 @@ export function lightPipeline(device: GPUDevice, source: ShaderSource, format: s
  * Encodes into the frame's current light target; frame submission stays owned
  * by the graph, so later bloom and glass passes can consume this exact output.
  */
-export function encodeLight(encoder: GPUCommandEncoder, pipeline: GPURenderPipeline, scene: GPUBindGroup, vertices: GPUBuffer, vertexCount: number, output: GPUTextureView, load: boolean): void;
+export function encodeLight(pass: GPURenderPassEncoder, pipeline: GPURenderPipeline, scene: GPUBindGroup, vertices: GPUBuffer, firstVertex: number, vertexCount: number): void;

@@ -1,20 +1,13 @@
 //! Both rasterized glass interfaces from pipelines/dark/create-graph.ts.
+use crate::geometry::PrismBuffers;
 use crate::shader::{ShaderSource, shader_module};
 use react::webapi::{
-    GPUBindGroup, GPUBlendComponent, GPUBlendState, GPUBuffer, GPUColorTargetState,
-    GPUCommandEncoder, GPUDevice, GPUFragmentState, GPUMultisampleState, GPUPrimitiveState,
-    GPURenderPassColorAttachment, GPURenderPassDescriptor, GPURenderPipeline,
-    GPURenderPipelineDescriptor, GPUTextureView, GPUVertexAttribute, GPUVertexBufferLayout,
+    GPUBindGroup, GPUBlendComponent, GPUBlendState, GPUColorTargetState, GPUDevice,
+    GPUFragmentState, GPUMultisampleState, GPUPrimitiveState, GPURenderPassEncoder,
+    GPURenderPipeline, GPURenderPipelineDescriptor, GPUVertexAttribute, GPUVertexBufferLayout,
     GPUVertexState,
 };
 use vgpu_prism::prism_mesh::PRISM_VERTEX_STRIDE;
-
-/// The mesh's buffers are shared by the back/front draws and debug topology.
-pub struct PrismBuffers {
-    pub vertices: &'static GPUBuffer,
-    pub indices: &'static GPUBuffer,
-    pub index_count: usize,
-}
 
 pub async fn glass_pipeline(
     device: &GPUDevice,
@@ -85,33 +78,14 @@ pub async fn glass_pipeline(
 /// The graph supplies its load/resolve target so background, back interface,
 /// internal light and front interface keep their original composition order.
 pub fn encode_glass(
-    encoder: &GPUCommandEncoder,
+    pass: &GPURenderPassEncoder,
     pipeline: &GPURenderPipeline,
     bindings: &GPUBindGroup,
     mesh: &PrismBuffers,
-    output: &GPUTextureView,
-    resolve: Option<&GPUTextureView>,
-    load: bool,
 ) {
-    let pass = encoder.begin_render_pass(GPURenderPassDescriptor {
-        label: None,
-        color_attachments: &[GPURenderPassColorAttachment {
-            view: output.into(),
-            depth_slice: None,
-            resolve_target: resolve.map(Into::into),
-            clear_value: None,
-            load_op: if load { "load" } else { "clear" },
-            store_op: "store",
-        }],
-        depth_stencil_attachment: None,
-        occlusion_query_set: None,
-        timestamp_writes: None,
-        max_draw_count: None,
-    });
     pass.set_pipeline(pipeline);
     pass.set_bind_group(0, Some(bindings), None);
     pass.set_vertex_buffer(0, Some(mesh.vertices), None, None);
     pass.set_index_buffer(mesh.indices, "uint16", None, None);
     pass.draw_indexed(mesh.index_count as f64, None, None, None, None);
-    pass.end();
 }

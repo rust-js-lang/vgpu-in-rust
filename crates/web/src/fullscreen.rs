@@ -1,9 +1,9 @@
 //! The fullscreen triangle used by vgpu effects. Shader code remains the
 //! original WGSL; WebGPU pipeline and command encoding are Rust.
 use react::webapi::{
-    GPUBindGroup, GPUColorTargetState, GPUCommandEncoder, GPUDevice, GPUFragmentState,
-    GPURenderPassColorAttachment, GPURenderPassDescriptor, GPURenderPipeline,
-    GPURenderPipelineDescriptor, GPUShaderModule, GPUTextureView, GPUVertexState,
+    GPUBindGroup, GPUColorTargetState, GPUDevice, GPUFragmentState, GPUMultisampleState,
+    GPURenderPassEncoder, GPURenderPipeline, GPURenderPipelineDescriptor, GPUShaderModule,
+    GPUVertexState,
 };
 
 use crate::shader::{ShaderSource, shader_module};
@@ -24,6 +24,7 @@ pub async fn fullscreen_pipeline(
     vertex: &GPUShaderModule,
     fragment: &GPUShaderModule,
     format: &str,
+    sample_count: u32,
     label: &str,
 ) -> &'static GPURenderPipeline {
     device
@@ -38,7 +39,11 @@ pub async fn fullscreen_pipeline(
             },
             primitive: None,
             depth_stencil: None,
-            multisample: None,
+            multisample: Some(GPUMultisampleState {
+                count: Some(f64::from(sample_count)),
+                mask: None,
+                alpha_to_coverage_enabled: None,
+            }),
             fragment: Some(GPUFragmentState {
                 module: fragment,
                 entry_point: Some("fs_main"),
@@ -55,29 +60,11 @@ pub async fn fullscreen_pipeline(
 
 /// Encodes one effect into the caller's frame. The frame owns submission.
 pub fn encode_fullscreen(
-    encoder: &GPUCommandEncoder,
+    pass: &GPURenderPassEncoder,
     pipeline: &GPURenderPipeline,
     bindings: &GPUBindGroup,
-    output: &GPUTextureView,
-    load: bool,
 ) {
-    let pass = encoder.begin_render_pass(GPURenderPassDescriptor {
-        label: None,
-        color_attachments: &[GPURenderPassColorAttachment {
-            view: output.into(),
-            depth_slice: None,
-            resolve_target: None,
-            clear_value: None,
-            load_op: if load { "load" } else { "clear" },
-            store_op: "store",
-        }],
-        depth_stencil_attachment: None,
-        occlusion_query_set: None,
-        timestamp_writes: None,
-        max_draw_count: None,
-    });
     pass.set_pipeline(pipeline);
     pass.set_bind_group(0, Some(bindings), None);
     pass.draw(3, None, None, None);
-    pass.end();
 }

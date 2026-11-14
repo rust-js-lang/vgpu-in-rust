@@ -15,7 +15,7 @@ export function fullscreenVertex(device) {
 }
 
 /** The fullscreen effect pipeline: one triangle, no vertex buffers or depth. */
-export async function fullscreenPipeline(device, vertex, fragment, format, label) {
+export async function fullscreenPipeline(device, vertex, fragment, format, sampleCount, label) {
   return await device.createRenderPipelineAsync({
     label,
     layout: "auto",
@@ -23,6 +23,7 @@ export async function fullscreenPipeline(device, vertex, fragment, format, label
       module: vertex,
       entryPoint: "vgpu_fullscreen_vs",
     },
+    multisample: { count: sampleCount },
     fragment: {
       module: fragment,
       entryPoint: "fs_main",
@@ -32,19 +33,9 @@ export async function fullscreenPipeline(device, vertex, fragment, format, label
 }
 
 /** Encodes one effect into the caller's frame. The frame owns submission. */
-export function encodeFullscreen(encoder, pipeline, bindings, output, load) {
-  const pass = encoder.beginRenderPass({
-    colorAttachments: [
-      {
-        view: output,
-        loadOp: load ? "load" : "clear",
-        storeOp: "store",
-      },
-    ],
-  });
+export function encodeFullscreen(pass, pipeline, bindings) {
   pass.setPipeline(pipeline);
   pass.setBindGroup(0, bindings);
   pass.draw(3);
-  pass.end();
 }
 //# sourceMappingURL=fullscreen.js.map

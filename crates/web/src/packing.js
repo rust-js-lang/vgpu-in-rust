@@ -20,7 +20,7 @@ function detailValueFromStr_from(value) {
 function packingDetailDebug_fmt(packingDetail) {
   return `PackingDetail { reason: ${$debugStr(packingDetail.reason)}, path: ${$debugStr(packingDetail.path)}, expected: ${detailValueDebug_fmt(packingDetail.expected)}, actual: ${detailValueDebug_fmt(packingDetail.actual)}, type: ${packingDetail.type == null ? "None" : `Some(${$debugStr(packingDetail.type)})`} }`;
 }
-function packingErrorDebug_fmt(packingError) {
+export function packingErrorDebug_fmt(packingError) {
   return `PackingError { code: ${$debugStr(packingError.code)}, message: ${$debugStr(packingError.message)}, fix: ${packingError.fix == null ? "None" : `Some(${$debugStr(packingError.fix)})`}, where: ${$debugStr(packingError.where)}, detail: ${packingError.detail == null ? "None" : `Some(${packingDetailDebug_fmt(packingError.detail)})`} }`;
 }
 

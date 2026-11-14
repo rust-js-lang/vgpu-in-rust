@@ -1,11 +1,9 @@
 //! The dark graph's additive spectral sheet draw, from create-graph.ts.
 use crate::shader::{ShaderSource, shader_module};
 use react::webapi::{
-    GPUBindGroup, GPUBlendComponent, GPUBlendState, GPUBuffer, GPUColorTargetState,
-    GPUCommandEncoder, GPUDevice, GPUFragmentState, GPUPrimitiveState,
-    GPURenderPassColorAttachment, GPURenderPassDescriptor, GPURenderPipeline,
-    GPURenderPipelineDescriptor, GPUTextureView, GPUVertexAttribute, GPUVertexBufferLayout,
-    GPUVertexState,
+    GPUBindGroup, GPUBlendComponent, GPUBlendState, GPUBuffer, GPUColorTargetState, GPUDevice,
+    GPUFragmentState, GPUPrimitiveState, GPURenderPassEncoder, GPURenderPipeline,
+    GPURenderPipelineDescriptor, GPUVertexAttribute, GPUVertexBufferLayout, GPUVertexState,
 };
 use vgpu_prism::light_mesh::LIGHT_VERTEX_STRIDE;
 
@@ -72,32 +70,15 @@ pub async fn light_pipeline(
 /// Encodes into the frame's current light target; frame submission stays owned
 /// by the graph, so later bloom and glass passes can consume this exact output.
 pub fn encode_light(
-    encoder: &GPUCommandEncoder,
+    pass: &GPURenderPassEncoder,
     pipeline: &GPURenderPipeline,
     scene: &GPUBindGroup,
     vertices: &GPUBuffer,
+    first_vertex: usize,
     vertex_count: usize,
-    output: &GPUTextureView,
-    load: bool,
 ) {
-    let pass = encoder.begin_render_pass(GPURenderPassDescriptor {
-        label: None,
-        color_attachments: &[GPURenderPassColorAttachment {
-            view: output.into(),
-            depth_slice: None,
-            resolve_target: None,
-            clear_value: None,
-            load_op: if load { "load" } else { "clear" },
-            store_op: "store",
-        }],
-        depth_stencil_attachment: None,
-        occlusion_query_set: None,
-        timestamp_writes: None,
-        max_draw_count: None,
-    });
     pass.set_pipeline(pipeline);
     pass.set_bind_group(0, Some(scene), None);
     pass.set_vertex_buffer(0, Some(vertices), None, None);
-    pass.draw(vertex_count as f64, None, None, None);
-    pass.end();
+    pass.draw(vertex_count as f64, None, Some(first_vertex as f64), None);
 }

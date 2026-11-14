@@ -14,7 +14,7 @@ Error-family fixes are used unchanged.
 Passing application checks:
 
 - 21 native Rust tests and the same 21 compiled JavaScript tests.
-- 34 app tests with more than 157,000 assertions: scene optics, framing,
+- 36 app tests with more than 157,000 assertions: scene optics, framing,
   interaction, exact rounded mesh vertices/topology, exact Float32 camera
   matrices, spectral layouts/vertices/flux, retained upload identity, native
   RangeErrors, React markup/context, retained assets and complete compiler-patch
@@ -31,14 +31,13 @@ Passing application checks:
   claimed.
 - Invalid uniform values allocate no GPU resource. Rejected updates preserve the
   previous upload, and valid updates retain the same buffer.
-- 15 production-built Chromium checks. Ten cover setup-tab parity, copy/reset,
+- 18 production-built Chromium checks. Ten cover setup-tab parity, copy/reset,
   rapid transitions, layout stability, unavailable/denied clipboard, reduced
-  motion, mobile sizing and unmount cleanup. Five require a real WebGPU adapter:
+  motion, mobile sizing and unmount cleanup. Eight require a real WebGPU adapter:
   all 44 retained shaders compile; malformed shader diagnostics work; the Rust
   fullscreen pass copies exact pixels/orientation; the additive light pass
   renders red/blue spectral output and disappears with zero reveal; both glass
-  interface pipelines compile for single-sample and 4x MSAA targets. Glass
-  pipeline compilation does not yet prove full glass composition.
+  interface pipelines compile for single-sample and 4x MSAA targets. Connected composition is now also checked, as detailed below.
 - Native core Clippy and the rust-js-aware web Clippy pass. Existing generated
   modules remain unchanged apart from newly added exports and functionality.
 
@@ -100,10 +99,43 @@ The old child-startup race was reported as #1770 and is now fixed upstream.
 
 ## Remaining milestone gates
 
-Finish the real prism scene graph, including environment baking, bloom,
+Finish the remaining prism scene graph, including bloom,
 light/dark composition, quality policy and resource lifecycle. Finish the full
 landing root and every section. Compare full-page GPU output, themes,
 desktop/mobile framing, interaction, fallback and cleanup against upstream.
 Obtain the remaining broad compiler evidence. Publish the source, enable
 workflow-based Pages, install a build/deploy-only workflow with current actions
 pinned to full commits, and verify the actual public page with visual evidence.
+
+## Connected environment and glass checkpoint
+
+Rust now owns offscreen/MSAA targets, reflected resource slots, retained uniform
+buffers, rounded indexed GPU geometry, and authored studio/debug environment
+baking with successive horizontal/vertical mip filtering. Group-zero shader
+inputs are validated before any uniform buffer allocation; rebinding preserves
+those buffers while texture views change. Draw helpers record commands into the
+graph-owned pass, so exterior light, back glass, internal light and front glass
+retain the original composition order. Fullscreen effects support the target
+sample count, including the scene's 4x MSAA copy stage.
+
+Real GPU comparisons show zero differing half-float channels across all eight
+mip levels for both environments and across a connected spectral/glass HDR
+scene. The comparison uses the original SDK, original environment/geometry code
+and independently generated upstream spectral mesh on the same device. A
+test-only gateway exports actual upstream functions; no mock renderer or
+production TypeScript implementation is substituted. Nonzero/finite checks
+prevent equal blank images from passing.
+
+Repeated preparation allocates/uploads/submits nothing, unchanged target sizes
+retain all resource identities, resizing destroys the previous resolved/MSAA
+textures, and readback verifies the new MSAA resolve pixels. Unit checks cover
+preflight failure without allocations, duplicate/missing bindings, nonsequential
+reflection slots, retained uploads and cleanup. The checkpoint's scoped tests
+pass: 36 app tests (over 157,000 assertions), 18 production browser tests, and
+rust-js-aware web Clippy. No compiler source changes were required for these
+features; f32/u16 vector uploads already work through the existing Takes rule.
+
+This remains a renderer checkpoint. Bloom, final presentation/particles, light
+mode, full lifecycle/interaction integration, the complete landing page and
+public Pages deployment are still required. The older broad compiler gate
+status above is unchanged.
