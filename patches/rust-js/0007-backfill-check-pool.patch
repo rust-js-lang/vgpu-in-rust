@@ -1,0 +1,186 @@
+diff --git a/TESTS.md b/TESTS.md
+index 3667374..674c99c 100644
+--- a/TESTS.md
++++ b/TESTS.md
+@@ -69,3 +69,11 @@ output-plan input owner, covering both Cargo and standalone compiles.
+ Downstream #1752 (2026-11-14): adds one lazy declaration/runtime-state
+ regression file and two mutations; source Rust and JavaScript scene checks
+ now contain twelve tests after adding physical lamp construction.
++
++Downstream #1762 (2026-11-14): adds one scheduling regression file with
++three real-process tests, covering CPU and memory admission, draining
++fractional reservations exactly, and requiring the
++oversized job to start only after the other jobs finish. All validation
++cases remain in the full gate. The downstream app now has fourteen native
++and compiled-Rust scene tests, including rounded geometry. Historical CI
++totals above remain explicitly unrecounted in this downstream checkout.
+diff --git a/docs/decisions/1093-the-check-before-a-push-is-the-pushs-check.md b/docs/decisions/1093-the-check-before-a-push-is-the-pushs-check.md
+index 0bd2206..7284c39 100644
+--- a/docs/decisions/1093-the-check-before-a-push-is-the-pushs-check.md
++++ b/docs/decisions/1093-the-check-before-a-push-is-the-pushs-check.md
+@@ -152,3 +152,27 @@ coverage gate or timeout is removed.
+ A planning regression proves all parts occur exactly once on one-, four-
+ and twelve-core machine plans, including an explicit file requested
+ alongside --all. This changes scheduling only, ADR 0262 case A.
++
++## Amendment: admit fitting work behind a blocked job (2026-11-14, #1762)
++
++The weighted pool chooses the longest queued job that currently fits both
++its CPU and memory budgets. Waiting only for the queue head can strand
++capacity: a one-core job holds half a two-core pool while a two-core job
++blocks another one-core job behind it. The memory budget has the same
++head-of-line problem.
++
++The existing sorted queue and resource accounting remain the single owners.
++No validation jobs are removed, no timeout is extended, and a job larger
++than the budget still runs alone. Two real-process regressions require the
++smaller job to release the running job before the larger one may start;
++they failed before backfilling and pass after it. This proves admission,
++not a controlled speed-up for the entire compiler suite.
++
++Resource accounting is derived from a set of active reservations, not
++independently incremented/decremented totals. Fractional core estimates can
++leave a positive floating-point residue after every child has exited;
++using that residue to decide whether an oversized job may run alone
++deadlocks an empty pool. A third bounded subprocess regression reproduces
++this with 0.1- and 0.2-core jobs before an oversized reservation. An empty
++reservation set now has exactly zero usage, with no tolerance or timeout
++escape hatch.
+diff --git a/docs/dev-loop.md b/docs/dev-loop.md
+index 17ba3ee..65560ae 100644
+--- a/docs/dev-loop.md
++++ b/docs/dev-loop.md
+@@ -175,7 +175,6 @@ Also in use, with no single before and after:
+ | Experiment | Status | Where |
+ |---|---|---|
+ | The metamorphic net's 16 rewrites of #1203 and #1204, timed on their first run (ldAC, 2026-11-10) | Measured, not yet sped up. On the 12-core M6, every case in both builds: the five loud rewrites 6.5 min in 12 parts (one part 15 min with #1214's hang, since fixed); the eleven contexts 47 min in 11 parts, most of it `test/reduced.ts` reducing each of their 68 failures, up to 300 s each, one after another in its part, the same program's plain and std failures reduced apart. A listed failure isn't reduced, so once the 68 are in `test/metamorphic-known.txt` the nightly pays their runs, not their reductions. Its reductions now run at once within each case's test, within its timeout (#1365, Active); one program's reduction shared by its builds, and across a part's cases, is still to do | `test/reduced.ts`, `test/metamorphic.test.ts` |
+-
+ | Downstream #1749: partition the default metamorphic sample in check:fast's pool | In progress. Reuses the existing case selector and machine-sized pooledParts; planning coverage checks pass. A timed-out cold check exposed the serial tail, but it was not a quiet benchmark, so no speed-up is claimed yet. Full rerun pending. | scripts/checkFast.ts, test/ci.test.ts |
+-
+ | Downstream #1754: keep the memory-cap fixture's allocation and sleep, read the final byte instead of counting every byte | Active downstream. Both the 2 GiB compiler-refusal assertion and 200 MiB stopping assertion pass. This removes incidental linear-time work without changing the memory-pressure contract or increasing the timeout. | test/reduce.test.ts |
++| Downstream #1762: backfill the weighted queue with runnable jobs | Active downstream. A full run hit its unchanged 720 s bound with suites still starting. CPU and memory head-of-line regressions each failed after 2 s before the fix and pass in under 50 ms after it. The same sorted queue selects the first fitting job. A later run had no child processes left but remained waiting: a third bounded probe reproduced fractional accounting residue. Active reservations now own accounting, so the empty pool is exact; all three probes and the 51-test planning group pass. Full rerun pending; these probe timings are not a whole-suite benchmark. | scripts/checkFast.ts, test/check-fast-pool.test.ts |
+diff --git a/scripts/checkFast.ts b/scripts/checkFast.ts
+index 5a63034..17406aa 100644
+--- a/scripts/checkFast.ts
++++ b/scripts/checkFast.ts
+@@ -460,6 +460,9 @@ export type Clock = { began: number; samples: { at: number; busy: number }[] };
+  * it kept busy. */
+ type Ran = { job: Job; code: number; log: string; start: number; end: number; cpu: number };
+ 
++/** Resources held by one active job; the set is the accounting authority. */
++type Reservation = Readonly<Pick<Job, "weight" | "memory">>;
++
+ /** The share of the machine's cores busy since the last call, from
+  * `os.cpus()`'s counters, which agree with `top`'s on macOS and Linux. */
+ function busySince(): () => number {
+@@ -532,18 +535,11 @@ export function run(
+   const queue = [...list].sort((a, b) => longest(b) - longest(a));
+   const groups = new Map<string, Ran[]>();
+   for (const { group } of list) if (group !== undefined) groups.set(group, []);
+-  let held = 0;
+-  let heldMemory = 0;
++  const reservations = new Set<Reservation>();
+   const budget = memoryBudget();
+   let waiting: (() => void)[] = [];
+-  const room = async (weight: number, memory: number) => {
+-    while (held > 0 && (held + weight > cores || heldMemory + memory > budget)) await new Promise<void>((wake) => waiting.push(wake));
+-    held += weight;
+-    heldMemory += memory;
+-  };
+-  const freed = (weight: number, memory: number) => {
+-    held -= weight;
+-    heldMemory -= memory;
++  const freed = (reservation: Reservation) => {
++    reservations.delete(reservation);
+     const woken = waiting;
+     waiting = [];
+     for (const wake of woken) wake();
+@@ -562,10 +558,27 @@ export function run(
+   };
+   const ran: Promise<Ran>[] = [];
+   const started = (async () => {
+-    for (const job of queue) {
++    while (queue.length > 0) {
++      // Derive totals from active reservations. Subtracting fractional
++      // weights can leave a positive residue after every job has ended.
++      let held = 0;
++      let heldMemory = 0;
++      for (const reservation of reservations) {
++        held += reservation.weight;
++        heldMemory += reservation.memory;
++      }
++      // Longest first among jobs that fit now. Waiting only for the head
++      // leaves usable cores or memory idle behind a larger job (#1762).
++      // An oversized job still runs alone, as before.
++      const next = queue.findIndex((job) => reservations.size === 0 || (held + weight(job) <= cores && heldMemory + job.memory <= budget));
++      if (next < 0) {
++        await new Promise<void>((wake) => waiting.push(wake));
++        continue;
++      }
++      const job = queue.splice(next, 1)[0]!;
+       const { name, cmd, env, timeout: given, group } = job;
+-      const holds = weight(job);
+-      await room(holds, job.memory);
++      const reservation = { weight: weight(job), memory: job.memory };
++      reservations.add(reservation);
+       ran.push(
+         (async () => {
+           const start = Date.now();
+@@ -589,7 +602,7 @@ export function run(
+           const [out, err] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
+           const code = await p.exited;
+           clearInterval(stop);
+-          freed(holds, job.memory);
++          freed(reservation);
+           const seconds = (Date.now() - start) / 1000;
+           const stopped = code !== 0 && seconds >= timeout ? `, stopped at its ${timeout} s (×${scale.toFixed(1)} for the load)` : "";
+           const cpu = Number(p.resourceUsage()?.cpuTime.total ?? 0) / 1e6;
+diff --git a/test/check-fast-pool.test.ts b/test/check-fast-pool.test.ts
+new file mode 100644
+index 0000000..97fb349
+--- /dev/null
++++ b/test/check-fast-pool.test.ts
+@@ -0,0 +1,43 @@
++import {expect,test} from "bun:test";
++import {mkdtempSync,rmSync} from "node:fs";
++import {tmpdir} from "node:os";
++import {join,resolve} from "node:path";
++import {run,type Job} from "../scripts/checkFast";
++
++for(const resource of ["cores","memory"] as const) {
++  test(`the pool starts a fitting job behind one waiting for ${resource}`,async()=>{
++    const directory=mkdtempSync(join(tmpdir(),"pool-backfill-"));
++    const marker=join(directory,"small-started");
++    // Fresh names prevent the machine's timing history from replacing the
++    // explicit resource weights in this scheduling regression.
++    const key=`backfill-${crypto.randomUUID()}`;
++    const job=(name:string,code:string,weight:number,memory=0):Job=>({
++      name:`${key}-${name}`,cmd:[process.execPath,"-e",code],env:{},timeout:5,weight,memory,
++    });
++    const jobs=[
++      job("first",`const until=Date.now()+2000;while(!(await Bun.file(${JSON.stringify(marker)}).exists())&&Date.now()<until)await Bun.sleep(10);process.exit(await Bun.file(${JSON.stringify(marker)}).exists()?0:1);`,1),
++      job("large","",resource==="cores"?2:1,resource==="memory"?1e9:0),
++      job("small",`await Bun.write(${JSON.stringify(marker)},"started");`,1),
++    ];
++    try {
++      const results=await run(jobs,"unused",2,{began:Date.now(),samples:[]});
++      expect(results.map(result=>result.code)).toEqual([0,0,0]);
++      expect(results.map(result=>result.job.name)).toEqual([jobs[0].name,jobs[2].name,jobs[1].name]);
++      expect(results[2].start).toBeGreaterThanOrEqual(Math.max(results[0].end,results[1].end));
++    } finally {
++      rmSync(directory,{recursive:true,force:true});
++    }
++  },15_000);
++}
++
++
++test("fractional reservations drain exactly before an oversized job runs alone",()=>{
++  const source=`import {run} from ${JSON.stringify(resolve(import.meta.dir,"../scripts/checkFast.ts"))};
++const key=crypto.randomUUID();
++const jobs=[0.1,0.2,1].map((weight,index)=>({name:key+index,cmd:[process.execPath,"-e",""],env:{},timeout:5,weight,memory:index===2?1e9:0}));
++const results=await run(jobs,"unused",2,{began:Date.now(),samples:[]});
++if(results.length!==3||results.some(result=>result.code!==0))process.exit(1);
++`;
++  const child=Bun.spawnSync([process.execPath,"-e",source],{timeout:3000,stdout:"pipe",stderr:"pipe"});
++  expect(child.exitCode,child.stdout.toString()+child.stderr.toString()).toBe(0);
++},10_000);

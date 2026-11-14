@@ -1,0 +1,275 @@
+diff --git a/TESTS.md b/TESTS.md
+index a431f6a..3667374 100644
+--- a/TESTS.md
++++ b/TESTS.md
+@@ -56,3 +56,16 @@ Downstream #1748 (2026-11-14): adds one declaration regression file, one test,
+ and two mutations. The historical CI totals above have not been remeasured in
+ this downstream checkout. The new regression checks strict TypeScript success
+ and required failures, plus unchanged runtime variant/payload behavior.
++
++Downstream #1749/#1481 (2026-11-14): adds one CI-planning regression and
++one native/JavaScript Cow corpus case, removes the now-supported Cow
++AsRef refusal row, and adds two dictionary mutations. The app also
++runs its ten Rust scene tests natively and through the Bun runner.
++
++Downstream #1751 (2026-11-14): adds one metadata-only runner-switch
++regression, and moves the standalone settings-input mutation to the common
++output-plan input owner, covering both Cargo and standalone compiles.
++
++Downstream #1752 (2026-11-14): adds one lazy declaration/runtime-state
++regression file and two mutations; source Rust and JavaScript scene checks
++now contain twelve tests after adding physical lamp construction.
+diff --git a/docs/architecture.md b/docs/architecture.md
+index 45c59a1..389a1ed 100644
+--- a/docs/architecture.md
++++ b/docs/architecture.md
+@@ -669,3 +669,9 @@ Do not read current mechanisms as promises of:
+ 
+ Dispatcher and file-size caps are held in the architecture tests. Use those
+ checks and reports for current measurements rather than copying counts here.
++
++The lazy-value state schema is owned by lower/std_types/lazy.rs:
++INITIALIZER and STORAGE_STATES are consumed by operation lowering and
++declarations/cells.rs. The payload key is js::HELD. The JavaScript runtime's
++existing helper layout is held to this schema by declarations-lazy.test.ts,
++which forces generated Rust values and checks the actual pending/ready states.
+diff --git a/docs/decisions/0318-lazy-cells.md b/docs/decisions/0318-lazy-cells.md
+index eebd0f8..defc7ba 100644
+--- a/docs/decisions/0318-lazy-cells.md
++++ b/docs/decisions/0318-lazy-cells.md
+@@ -61,3 +61,21 @@ function lookup(name) {
+   value, copy a number given as `&mut`, and refuse a `LazyLock` and a
+   `static` one.
+ - `docs/std-coverage.txt`: `LazyCell` 5 of 5, `LazyLock` 5 of 5.
++
++## Amendment: lazy storage is typed at module boundaries (2026-11-14, #1752)
++
++The lazy representation owner exposes its initializer key and the two
++storage states as a Pending/Ready enum: pending (a callable or poisoned/null
++initializer) and ready (a required payload and no active initializer).
++The enum owns required-member queries; independent booleans cannot describe
++an impossible third or fourth state. Declaration generation
++consumes this schema and the shared held-value key, instead of emitting any
++or keeping another property catalog. Lowering uses the same initializer key.
++The runtime helpers retain their established layout; a regression forces
++Rust-generated LazyCell and LazyLock values and checks both actual states
++against the declarations, testing the necessary JS-runtime mirror.
++
++Strict TypeScript callers accept numeric and structured payloads and reject
++wrong initializer returns, wrong payloads, and an object with neither state.
++Mutations make the ready payload optional or erase the initializer result
++type. Runtime representation is unchanged, ADR 0262 case A.
+diff --git a/docs/guide/interop/types.md b/docs/guide/interop/types.md
+index 1cef2a0..4619e15 100644
+--- a/docs/guide/interop/types.md
++++ b/docs/guide/interop/types.md
+@@ -3900,3 +3900,13 @@ export function greet(name: string, greeting?: string | null | undefined): strin
+ 
+ A JS type's declaration is its `#[rust_js::types]`; one without is `any`.
+ See [Export Rust APIs to JavaScript](export-to-javascript.md).
++
++## LazyCell and LazyLock declarations
++
++An exported lazy value retains its payload type. Before initialization its
++initializer is callable, or null while initializing/poisoned; after a
++successful initialization its payload is required and the initializer is
++undefined. The declaration is the union of those storage states. An empty
++object, a wrong initializer result, and a wrong payload are rejected by
++TypeScript. Both standard lazy types use the same representation schema
++([ADR 0318](../../decisions/0318-lazy-cells.md), amended, #1752).
+diff --git a/scripts/mutations/lower/declarations/cells.ts b/scripts/mutations/lower/declarations/cells.ts
+index ae6e267..ccd96c9 100644
+--- a/scripts/mutations/lower/declarations/cells.ts
++++ b/scripts/mutations/lower/declarations/cells.ts
+@@ -3,6 +3,28 @@
+ import type { Mutation } from "../../../mutations";
+ 
+ export const mutations: Mutation[] = [
++{
++  "name": "lazy-ready-payload-optional",
++  "breaks": "an empty object is admitted as an initialized lazy cell without its payload (#1752)",
++  "file": "src/lower/declarations/cells.rs",
++  "find": "{ \"kind\": \"property\", \"name\": crate::js::HELD, \"optional\": !state.requires_payload(), \"readonly\": false, \"type\": value }",
++  "replace": "{ \"kind\": \"property\", \"name\": crate::js::HELD, \"optional\": true, \"readonly\": false, \"type\": value }",
++  "tests": [
++    "test/declarations-lazy.test.ts"
++  ]
++},
++
++{
++  "name": "lazy-initializer-payload-any",
++  "breaks": "a lazy initializer can return the wrong payload type without a TypeScript error (#1752)",
++  "file": "src/lower/declarations/cells.rs",
++  "find": "json!({ \"kind\": \"function\", \"typeParameters\": [], \"params\": [], \"returns\": payload.clone() })",
++  "replace": "json!({ \"kind\": \"function\", \"typeParameters\": [], \"params\": [], \"returns\": keyword(\"any\") })",
++  "tests": [
++    "test/declarations-lazy.test.ts"
++  ]
++},
++
+   {
+     name: "cell-option-unwritten",
+     breaks:
+diff --git a/src/lower/declarations.rs b/src/lower/declarations.rs
+index 4522393..b6bc43a 100644
+--- a/src/lower/declarations.rs
++++ b/src/lower/declarations.rs
+@@ -1189,6 +1189,9 @@ impl<'tcx> Declarations<'_, 'tcx> {
+                 if let Some(declared) = self.known_enum(ty) {
+                     return declared;
+                 }
++                if is_std_def(tcx, did, StdItem::LazyCell) {
++                    return self.lazy(args.type_at(0));
++                }
+                 if ty.is_box() {
+                     return self.ts(args.type_at(0));
+                 }
+diff --git a/src/lower/declarations/cells.rs b/src/lower/declarations/cells.rs
+index 94e9bce..aeb192a 100644
+--- a/src/lower/declarations/cells.rs
++++ b/src/lower/declarations/cells.rs
+@@ -9,9 +9,34 @@ use rustc_hir::def::{DefKind, Res};
+ use rustc_middle::ty::{self, Ty};
+ 
+ use super::super::recognition::{StdItem, is_std_def};
+-use super::Declarations;
++use super::{Declarations, keyword, or_undefined, union};
++use serde_json::{Value, json};
+ 
+ impl<'tcx> Declarations<'_, 'tcx> {
++    /// The std lazy owner's state schema, parameterized by the payload type.
++    pub(super) fn lazy(&mut self, item: Ty<'tcx>) -> Value {
++        let payload = self.ts(item);
++        let states = super::super::std_types::lazy::STORAGE_STATES.iter().map(|state| {
++            let initializer = if state.requires_initializer() {
++                union(vec![
++                    json!({ "kind": "function", "typeParameters": [], "params": [], "returns": payload.clone() }),
++                    keyword("null"),
++                ])
++            } else {
++                keyword("undefined")
++            };
++            let value = if state.requires_payload() { payload.clone() } else { or_undefined(payload.clone()) };
++            json!({
++                "kind": "object",
++                "members": [
++                    { "kind": "property", "name": super::super::std_types::lazy::INITIALIZER, "optional": !state.requires_initializer(), "readonly": false, "type": initializer },
++                    { "kind": "property", "name": crate::js::HELD, "optional": !state.requires_payload(), "readonly": false, "type": value },
++                ],
++            })
++        }).collect();
++        union(states)
++    }
++
+     /// `Option<T>`'s `T` as written, where `written` is one, or a `Cell`'s or
+     /// a `RefCell`'s of one, the `Option` a field's cell holds (rd414).
+     pub(super) fn written_option<'h>(&self, written: &'h hir::Ty<'tcx>) -> Option<&'h hir::Ty<'tcx>> {
+diff --git a/src/lower/std_types/lazy.rs b/src/lower/std_types/lazy.rs
+index 2c4d30e..65aaff0 100644
+--- a/src/lower/std_types/lazy.rs
++++ b/src/lower/std_types/lazy.rs
+@@ -9,6 +9,28 @@ use crate::lower::temporary_names::Role;
+ use crate::lower::{FnCx, R};
+ use rustc_middle::ty;
+ 
++/// The initializer's member name, shared by lowering and declarations.
++pub(in crate::lower) const INITIALIZER: &str = "init";
++
++/// The two observable storage states. Pending includes initialization and
++/// poisoning: its initializer is callable or null; a ready cell holds a value.
++pub(in crate::lower) enum StorageState {
++    Pending,
++    Ready,
++}
++
++impl StorageState {
++    pub(in crate::lower) fn requires_initializer(&self) -> bool {
++        matches!(self, Self::Pending)
++    }
++
++    pub(in crate::lower) fn requires_payload(&self) -> bool {
++        matches!(self, Self::Ready)
++    }
++}
++
++pub(in crate::lower) const STORAGE_STATES: [StorageState; 2] = [StorageState::Pending, StorageState::Ready];
++
+ /// A `LazyCell`'s or `LazyLock`'s own functions, and its `Deref`.
+ #[derive(Clone, Copy, PartialEq)]
+ pub(in crate::lower) enum LazyOp {
+@@ -47,7 +69,7 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+         };
+         let lazy = values.next().expect("rustc checked the arguments");
+         if op == LazyOp::New {
+-            return Ok(Some(Expr::object(vec![Prop::Field("init".into(), lazy)])));
++            return Ok(Some(Expr::object(vec![Prop::Field(INITIALIZER.into(), lazy)])));
+         }
+         // A `LazyLock`'s init that uses it deadlocks in Rust: rust-js's error.
+         let force = match self.recognition().is_lock_cell(tys[0].peel_refs()) {
+@@ -80,7 +102,7 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+             LazyOp::Get if self.boxed_payload(item) => self.some(Expr::held(lazy.clone())),
+             _ => Expr::held(lazy.clone()),
+         };
+-        let made = Expr::bin(Op::Eq, Expr::member(lazy, "init"), Expr::undefined());
++        let made = Expr::bin(Op::Eq, Expr::member(lazy, INITIALIZER), Expr::undefined());
+         Ok(Some(Expr::cond(made, given, Expr::undefined())))
+     }
+ }
+diff --git a/test/declarations-lazy.test.ts b/test/declarations-lazy.test.ts
+new file mode 100644
+index 0000000..d9abff9
+--- /dev/null
++++ b/test/declarations-lazy.test.ts
+@@ -0,0 +1,52 @@
++
++import {expect,test} from "bun:test";
++import {readFileSync,writeFileSync} from "node:fs";
++import {join} from "node:path";
++import {compiler,fixture,root,run} from "./support";
++
++test("lazy cells and locks declare their initializer and payload states",async()=>{
++  const dir=fixture("declarations-lazy");
++  writeFileSync(join(dir,"lib.rs"),`use std::cell::LazyCell;
++use std::sync::LazyLock;
++
++pub struct Point { pub x: f64, pub y: f64 }
++pub static ORIGIN: LazyLock<Point> = LazyLock::new(|| Point { x: 0.0, y: 0.0 });
++pub fn numbers() -> LazyCell<Vec<u32>> { LazyCell::new(|| vec![1,2,3]) }
++pub fn hold<T>(cell: LazyCell<T>) -> LazyCell<T> { cell }
++pub fn origin() -> &'static Point { &ORIGIN }
++pub fn force_numbers(cell: &LazyCell<Vec<u32>>) -> &Vec<u32> { LazyCell::force(cell) }
++`);
++  run([compiler,"--declarations",join(dir,"lib.rs"),"-o",join(dir,"lib.js")],30_000);
++  const dts=readFileSync(join(dir,"lib.d.ts"),"utf8");
++  expect(dts).not.toMatch(/\bany\b/);
++  writeFileSync(join(dir,"use.ts"),`import {ORIGIN,numbers,hold} from "./lib.js";
++const point: {x:number;y:number}|undefined = ORIGIN.value;
++const initialized: {x:number;y:number}|undefined = ORIGIN.init?.();
++const values: number[]|undefined = numbers().value;
++const value: number|undefined = hold({init:()=>42}).value;
++const ready = hold<number>({value:42});
++const poisoned = hold<number>({init:null});
++// @ts-expect-error The initializer must produce a point.
++const badInit: typeof ORIGIN = {init:()=>123};
++// @ts-expect-error A ready payload must be a point.
++const badPayload: typeof ORIGIN = {value:"x"};
++// @ts-expect-error No initializer and no payload is not a valid lazy state.
++const empty: typeof ORIGIN = {};
++`);
++  writeFileSync(join(dir,"tsconfig.json"),JSON.stringify({compilerOptions:{module:"esnext",moduleResolution:"bundler",strict:true,noEmit:true,skipLibCheck:false,exactOptionalPropertyTypes:true,typeRoots:[join(root,"node_modules/@types")]},files:["use.ts"]}));
++  const checked=Bun.spawnSync([process.execPath,join(root,"node_modules/typescript/bin/tsc"),"-p",join(dir,"tsconfig.json")],{timeout:30_000});
++  expect(checked.stdout.toString()+checked.stderr.toString()).toBe("");
++  expect(checked.exitCode).toBe(0);
++  const generated=await import(join(dir,"lib.js"));
++  expect(typeof generated.ORIGIN.init).toBe("function");
++  const point=generated.origin();
++  expect(point).toEqual({x:0,y:0});
++  expect(generated.ORIGIN.value).toBe(point);
++  expect(generated.ORIGIN.init).toBeUndefined();
++  const cell=generated.numbers();
++  expect(typeof cell.init).toBe("function");
++  const values=generated.forceNumbers(cell);
++  expect(values).toEqual([1,2,3]);
++  expect(cell.value).toBe(values);
++  expect(cell.init).toBeUndefined();
++});

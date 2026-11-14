@@ -1,0 +1,63 @@
+//! Documentation links from the upstream landing page.
+//! The documentation server is outside this Pages milestone, so links resolve
+//! to its canonical upstream origin instead of nonexistent local routes.
+use react::{JSX, jsx};
+
+use crate::inline_code::InlineCode;
+
+// Same copy as upstream's landing docLinks.
+const DOC_LINKS: [(&str, &str, &str); 4] = [
+    (
+        "/docs/get-started",
+        "Getting Started",
+        "Install `vgpu` and render with `init()`.",
+    ),
+    (
+        "/docs/concepts",
+        "Core Concepts",
+        "Learn Gpu, set(), targets, frames, bundles, and adapters.",
+    ),
+    (
+        "/docs/reference",
+        "API Reference",
+        "Package map and generated topic pages.",
+    ),
+    (
+        "/examples",
+        "Examples",
+        "Live WebGPU demos with read-only source views.",
+    ),
+];
+
+pub fn DocsLinksSection() -> JSX::Element {
+    jsx! {
+        <section className="mb-24">
+            <h2 className="mb-10 text-pretty text-2xl text-gray-1000 md:text-3xl">
+                {"Explore the Docs"}
+            </h2>
+            <div className="grid gap-4 md:grid-cols-2">
+                {DOC_LINKS.iter().map(|&(href, title, description)| jsx! {
+                    <a key={href} href={format!("https://vgpu.sh/en{href}")} className="interactive-card p-6">
+                        <div className="mb-2 flex items-center justify-between">
+                            <h3 className="text-pretty text-gray-1000">{title}{" →"}</h3>
+                        </div>
+                        <p className="text-pretty text-sm text-gray-900">
+                            <InlineCode text={description} />
+                        </p>
+                    </a>
+                }).collect::<Vec<_>>()}
+            </div>
+            <p className="mt-6 text-pretty text-sm text-gray-900">
+                {"Building agent tooling? Read the "}
+                <a className="underline" href="https://vgpu.sh/en/docs/examples-api">
+                    {"vgpu Examples API reference"}
+                </a>
+                {" or inspect its "}
+                <a className="underline" href="https://vgpu.sh/openapi.json">
+                    {"OpenAPI 3.1 description"}
+                </a>
+                {"."}
+            </p>
+        </section>
+    }
+}

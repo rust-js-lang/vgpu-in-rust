@@ -1,0 +1,13 @@
+[workspace]
+members = ["crates/prism", "crates/web"]
+exclude = ["rust-js"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(rust_js)"] }
