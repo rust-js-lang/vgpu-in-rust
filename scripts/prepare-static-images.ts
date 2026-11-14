@@ -3,13 +3,18 @@ import {availableParallelism} from 'node:os';
 import {resolve} from 'node:path';
 import {mkdir} from 'node:fs/promises';
 import sharp from 'sharp';
+import {getImageProps} from 'next/image';
 import {imageConfigDefault} from 'next/dist/shared/lib/image-config.js';
 // Same geometry and encoders as Next 16.3.3 image-optimizer.ts. Pages serves
 // these immutable files; <picture> performs browser format selection.
 const root=resolve(import.meta.dir,'..');
 const sources=['eve-billboard.png','eve-billboard-8k.png','eve-dev-home.png'];
 const formats=[{name:'avif',mime:'image/avif'},{name:'webp',mime:'image/webp'},{name:'png',mime:'image/png'}] as const;
-const widths=imageConfigDefault.deviceSizes,quality=imageConfigDefault.qualities![0];
+const nativeWidths=new Set([...imageConfigDefault.deviceSizes,...imageConfigDefault.imageSizes]);
+// Next also probes custom loaders during development. Ask the native props
+// builder for those widths instead of copying its diagnostic constants.
+getImageProps({src:'/static-image-probe.png',alt:'',fill:true,loader:({width})=>{nativeWidths.add(width);return '/static-image-probe-'+width+'.png';}});
+const widths=[...nativeWidths].sort((a,b)=>a-b),quality=imageConfigDefault.qualities![0];
 const manifestPath=resolve(root,'assets/generated/static-images.json');
 const hash=(bytes:Uint8Array|string)=>createHash('sha256').update(bytes).digest('hex');
 const packageConfig=await Bun.file(resolve(root,'package.json')).json();

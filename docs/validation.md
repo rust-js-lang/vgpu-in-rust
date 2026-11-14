@@ -6,9 +6,12 @@ React leaves and GPU building blocks; they do not prove a completed landing page
 ## Current checkpoint
 
 The published rust-js gitlink is
-`4c58cdcf6365ccafa799d2a1e634df989281c5cd` (2026-11-14), including the published
-#1784, #1785 and #1786 fixes. A downstream Battery Status API binding patch for #1790 is retained;
-see patches/rust-js for the patch and published replacements. No private compiler commit is the gitlink.
+`618662df715d2af347987d76ca8525fd7ab66f39` (2026-11-14), including the published
+#1784, #1785, #1786 and #1790 fixes. No downstream compiler source patch remains.
+The current full web crate is blocked by imported JSX props companions (#1794).
+See docs/checkpoint.md for the output-card work and focused validation; the
+application results below describe the earlier hero checkpoint unless stated otherwise.
+No private compiler commit is the gitlink.
 The upstream nullable-promise, async-declaration, basic derived-Debug and native
 Error-family fixes are used unchanged.
 
