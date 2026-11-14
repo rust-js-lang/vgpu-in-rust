@@ -1,0 +1,318 @@
+diff --git a/docs/decisions/0281-webapi-covers-typescripts-dom.md b/docs/decisions/0281-webapi-covers-typescripts-dom.md
+index 454f3b9..14f7a4e 100644
+--- a/docs/decisions/0281-webapi-covers-typescripts-dom.md
++++ b/docs/decisions/0281-webapi-covers-typescripts-dom.md
+@@ -484,3 +484,13 @@ that types its parameter and keeps it, and one that calls a listener typed
+ of any borrow; and `test/js-builtins.test.ts`'s "a proxy's traps are
+ given values they may keep", of `apply`'s, `construct`'s and
+ `defineProperty`'s.
++
++## Amendment: optional Battery Status API (#1790)
++
++The explicit platform catalog includes battery-status and BatteryManager. The
++existing generator owns its native promise, getters, EventTarget inheritance
++and typed event names. Consumers feature-check Navigator::get_battery before
++calling it, since support is optional. No application-local binding is needed.
++This is case N of ADR 0262: native JavaScript behavior is preserved unchanged.
++The webapi-battery regression checks promises, rejection identity, getters and
++listener identity/removal.
+diff --git a/docs/guide/libraries/README.md b/docs/guide/libraries/README.md
+index e163913..d386594 100644
+--- a/docs/guide/libraries/README.md
++++ b/docs/guide/libraries/README.md
+@@ -829,3 +829,9 @@ A JavaScript library from npm is another matter: its binding is a crate
+ of its own, written as [Write bindings](../interop/bindings.md) says, and
+ shared as an npm package ([ADR 0118](../../decisions/0118-bindings-on-npm-only.md)).
+ A crate from crates.io is [Crates from crates.io](crates-io.md).
++
++The optional Battery Status API is also bound: feature-check
++`js::is_defined((navigator, Navigator::get_battery))` before awaiting
++`navigator.get_battery()`. Its BatteryManager retains native `charging()` and
++`level()` getters and typed `Levelchange`/`Chargingchange` listeners. A rejected
++promise remains a native rejection; applications decide their advisory policy.
+diff --git a/test/webapi-battery.test.ts b/test/webapi-battery.test.ts
+new file mode 100644
+index 0000000..3ff6978
+--- /dev/null
++++ b/test/webapi-battery.test.ts
+@@ -0,0 +1,34 @@
++import { beforeAll, expect, test } from 'bun:test';
++import { writeFileSync } from 'node:fs';
++import { join } from 'node:path';
++import { buildReact, compiler, fixture, run, target } from './support';
++beforeAll(buildReact, 60_000);
++test('Battery Status API retains native promises, getters and listener identity', async()=>{
++ const dir=fixture('webapi-battery');
++ writeFileSync(join(dir,'lib.rs'),`use webapi::{BatteryManager, Event, EventTargetExt, Navigator, events, listener};
++ pub fn supported(navigator: &Navigator) -> bool { js::is_defined((navigator, Navigator::get_battery)) }
++ pub async fn level(navigator: &Navigator) -> f64 { navigator.get_battery().await.level() }
++ pub fn charging(battery: &BatteryManager) -> bool { battery.charging() }
++ pub fn listen(battery: &BatteryManager) -> &'static dyn Fn(&'static Event) {
++   let on_change=listener(|_: &'static Event| {});
++   battery.add_event_listener(events::Levelchange, on_change, None);
++   battery.add_event_listener(events::Chargingchange, on_change, None);
++   on_change
++ }
++ pub fn unlisten(battery: &BatteryManager, handler: &'static dyn Fn(&'static Event)) {
++   battery.remove_event_listener(events::Levelchange,handler,None);
++   battery.remove_event_listener(events::Chargingchange,handler,None);
++ }
++ `);
++ run([compiler,join(dir,'lib.rs'),'-o',join(dir,'lib.js'),'--','--extern',`webapi=${join(target,'libwebapi.rmeta')}`,'--extern',`js=${join(target,'libjs.rmeta')}`,'-L',target]);
++ const lib=await import(join(dir,'lib.js'));
++ const calls:any[]=[];
++ const battery={level:0.25,charging:false,addEventListener:(...args:any[])=>calls.push(['add',...args]),removeEventListener:(...args:any[])=>calls.push(['remove',...args])};
++ const navigator={getBattery:()=>Promise.resolve(battery)};
++ expect(lib.supported({})).toBe(false);expect(lib.supported(navigator)).toBe(true);
++ expect(await lib.level(navigator)).toBe(0.25);expect(lib.charging(battery)).toBe(false);
++ const handler=lib.listen(battery);lib.unlisten(battery,handler);
++ expect(calls.map(c=>c.slice(0,2))).toEqual([['add','levelchange'],['add','chargingchange'],['remove','levelchange'],['remove','chargingchange']]);
++ for(const call of calls) expect(call[2]).toBe(handler);
++ const failure=new Error('denied');await expect(lib.level({getBattery:()=>Promise.reject(failure)})).rejects.toBe(failure);
++});
+diff --git a/webapi/generate.ts b/webapi/generate.ts
+index 8d24d15..4cb48c7 100644
+--- a/webapi/generate.ts
++++ b/webapi/generate.ts
+@@ -25,10 +25,12 @@ import webrefElements from "@webref/elements";
+ import elementsPackage from "@webref/elements/package.json" with { type: "json" };
+ 
+ // The specs to read. Partial interfaces and mixins from these are merged in.
+-const SPECS = ["dom", "html", "hr-time", "uievents", "pointerevents", "cssom", "cssom-view", "geometry", "fetch", "encoding", "wasm-js-api", "wasm-web-api", "xhr", "streams", "touch-events", "FileAPI", "clipboard-apis", "css-animations", "css-transitions", "SVG", "svg-paths", "svg-animations", "filter-effects", "css-masking", "intersection-observer", "url", "console"];
++const SPECS = ["battery-status", "dom", "html", "hr-time", "uievents", "pointerevents", "cssom", "cssom-view", "geometry", "fetch", "encoding", "wasm-js-api", "wasm-web-api", "xhr", "streams", "touch-events", "FileAPI", "clipboard-apis", "css-animations", "css-transitions", "SVG", "svg-paths", "svg-animations", "filter-effects", "css-masking", "intersection-observer", "url", "console"];
+ 
+ // The everyday DOM. Members that use any other interface are skipped.
+ const INTERFACES = [
++  // battery-status: optional battery advisory signals
++  "BatteryManager",
+   // dom
+   "EventTarget", "Event", "Node", "CharacterData", "Text", "Comment", "Element", "Document",
+   "DocumentFragment", "DOMTokenList", "NodeList", "HTMLCollection", "AbortController", "AbortSignal",
+diff --git a/webapi/src/lib.rs b/webapi/src/lib.rs
+index a033520..250929f 100644
+--- a/webapi/src/lib.rs
++++ b/webapi/src/lib.rs
+@@ -1,5 +1,5 @@
+ //! The web platform for rust-js: DOM bindings generated by `webapi/generate.ts`
+-//! from W3C's WebIDL (`@webref/idl` 3.84.0; specs: dom, html, hr-time, uievents, pointerevents, cssom, cssom-view, geometry, fetch, encoding, wasm-js-api, wasm-web-api, xhr, streams, touch-events, FileAPI, clipboard-apis, css-animations, css-transitions, SVG, svg-paths, svg-animations, filter-effects, css-masking, intersection-observer, url, console). Do not edit.
++//! from W3C's WebIDL (`@webref/idl` 3.84.0; specs: battery-status, dom, html, hr-time, uievents, pointerevents, cssom, cssom-view, geometry, fetch, encoding, wasm-js-api, wasm-web-api, xhr, streams, touch-events, FileAPI, clipboard-apis, css-animations, css-transitions, SVG, svg-paths, svg-animations, filter-effects, css-masking, intersection-observer, url, console). Do not edit.
+ //!
+ //! Each interface is a type (`Element`), its members its methods (`el.append(..)`),
+ //! and its constructors, statics and constants a module of its name (`element`). Inheritance
+@@ -62,6 +62,126 @@ impl Deref for GlobalThis {
+     }
+ }
+ 
++/// [`BatteryManager`](https://developer.mozilla.org/docs/Web/API/BatteryManager)
++#[cfg_attr(rust_js, rust_js::types = "BatteryManager")]
++pub struct BatteryManager(PhantomData<JsObject>);
++
++/// `a === b`: the same object.
++impl PartialEq for BatteryManager {
++    #[cfg_attr(rust_js, rust_js::link_name = "===")]
++    fn eq(&self, other: &Self) -> bool {
++        core::ptr::eq(self, other)
++    }
++}
++
++impl Eq for BatteryManager {}
++
++impl Deref for BatteryManager {
++    type Target = EventTarget;
++
++    fn deref(&self) -> &EventTarget {
++        // Never runs: rust-js compiles this `Deref` to the object itself.
++        unsafe { &*(self as *const Self as *const EventTarget) }
++    }
++}
++
++pub mod battery_manager {
++    use super::*;
++
++    /// Treats `this` as `BatteryManager` without checking that it is one.
++    #[cfg_attr(rust_js, rust_js::link_name = "this")]
++    pub fn unchecked_from(this: &EventTarget) -> &'static BatteryManager {
++        unreachable!()
++    }
++}
++
++impl BatteryManager {
++    /// [MDN](https://developer.mozilla.org/docs/Web/API/BatteryManager/charging)
++    #[cfg_attr(rust_js, rust_js::link_name = "get charging")]
++    pub fn charging(&self) -> bool {
++        unreachable!()
++    }
++
++    /// [MDN](https://developer.mozilla.org/docs/Web/API/BatteryManager/chargingTime)
++    #[cfg_attr(rust_js, rust_js::link_name = "get chargingTime")]
++    pub fn charging_time(&self) -> f64 {
++        unreachable!()
++    }
++
++    /// [MDN](https://developer.mozilla.org/docs/Web/API/BatteryManager/dischargingTime)
++    #[cfg_attr(rust_js, rust_js::link_name = "get dischargingTime")]
++    pub fn discharging_time(&self) -> f64 {
++        unreachable!()
++    }
++
++    /// [MDN](https://developer.mozilla.org/docs/Web/API/BatteryManager/level)
++    #[cfg_attr(rust_js, rust_js::link_name = "get level")]
++    pub fn level(&self) -> f64 {
++        unreachable!()
++    }
++
++    /// [MDN](https://developer.mozilla.org/docs/Web/API/BatteryManager/onchargingchange)
++    #[cfg_attr(rust_js, rust_js::link_name = "get onchargingchange")]
++    #[cfg_attr(rust_js, rust_js::nullable)]
++    pub fn onchargingchange(&self) -> Option<&'static dyn Fn(&Event)> {
++        unreachable!()
++    }
++
++    /// [MDN](https://developer.mozilla.org/docs/Web/API/BatteryManager/onchargingchange)
++    #[cfg_attr(rust_js, rust_js::link_name = "set onchargingchange")]
++    #[cfg_attr(rust_js, rust_js::nullable(value))]
++    #[cfg_attr(rust_js, rust_js::runs_nothing)]
++    pub fn set_onchargingchange(&self, value: Option<&dyn IntoEventHandler<Event>>) {
++        unreachable!()
++    }
++
++    /// [MDN](https://developer.mozilla.org/docs/Web/API/BatteryManager/onchargingtimechange)
++    #[cfg_attr(rust_js, rust_js::link_name = "get onchargingtimechange")]
++    #[cfg_attr(rust_js, rust_js::nullable)]
++    pub fn onchargingtimechange(&self) -> Option<&'static dyn Fn(&Event)> {
++        unreachable!()
++    }
++
++    /// [MDN](https://developer.mozilla.org/docs/Web/API/BatteryManager/onchargingtimechange)
++    #[cfg_attr(rust_js, rust_js::link_name = "set onchargingtimechange")]
++    #[cfg_attr(rust_js, rust_js::nullable(value))]
++    #[cfg_attr(rust_js, rust_js::runs_nothing)]
++    pub fn set_onchargingtimechange(&self, value: Option<&dyn IntoEventHandler<Event>>) {
++        unreachable!()
++    }
++
++    /// [MDN](https://developer.mozilla.org/docs/Web/API/BatteryManager/ondischargingtimechange)
++    #[cfg_attr(rust_js, rust_js::link_name = "get ondischargingtimechange")]
++    #[cfg_attr(rust_js, rust_js::nullable)]
++    pub fn ondischargingtimechange(&self) -> Option<&'static dyn Fn(&Event)> {
++        unreachable!()
++    }
++
++    /// [MDN](https://developer.mozilla.org/docs/Web/API/BatteryManager/ondischargingtimechange)
++    #[cfg_attr(rust_js, rust_js::link_name = "set ondischargingtimechange")]
++    #[cfg_attr(rust_js, rust_js::nullable(value))]
++    #[cfg_attr(rust_js, rust_js::runs_nothing)]
++    pub fn set_ondischargingtimechange(&self, value: Option<&dyn IntoEventHandler<Event>>) {
++        unreachable!()
++    }
++
++    /// [MDN](https://developer.mozilla.org/docs/Web/API/BatteryManager/onlevelchange)
++    #[cfg_attr(rust_js, rust_js::link_name = "get onlevelchange")]
++    #[cfg_attr(rust_js, rust_js::nullable)]
++    pub fn onlevelchange(&self) -> Option<&'static dyn Fn(&Event)> {
++        unreachable!()
++    }
++
++    /// [MDN](https://developer.mozilla.org/docs/Web/API/BatteryManager/onlevelchange)
++    #[cfg_attr(rust_js, rust_js::link_name = "set onlevelchange")]
++    #[cfg_attr(rust_js, rust_js::nullable(value))]
++    #[cfg_attr(rust_js, rust_js::runs_nothing)]
++    pub fn set_onlevelchange(&self, value: Option<&dyn IntoEventHandler<Event>>) {
++        unreachable!()
++    }
++
++}
++
+ /// [`EventTarget`](https://developer.mozilla.org/docs/Web/API/EventTarget)
+ #[cfg_attr(rust_js, rust_js::types = "EventTarget")]
+ pub struct EventTarget(PhantomData<JsObject>);
+@@ -28884,6 +29004,12 @@ impl PartialEq for Navigator {
+ impl Eq for Navigator {}
+ 
+ impl Navigator {
++    /// [MDN](https://developer.mozilla.org/docs/Web/API/Navigator/getBattery)
++    #[cfg_attr(rust_js, rust_js::link_name = "getBattery")]
++    pub fn get_battery(&self) -> Promise<&'static BatteryManager> {
++        unreachable!()
++    }
++
+     /// [MDN](https://developer.mozilla.org/docs/Web/API/Navigator/sendBeacon)
+     #[cfg_attr(rust_js, rust_js::link_name = "sendBeacon")]
+     pub fn send_beacon(&self, url: &str, data: Option<&dyn IntoBodyInit>) -> bool {
+@@ -105174,6 +105300,14 @@ pub mod events {
+     #[cfg_attr(rust_js, rust_js::name = "change")]
+     pub struct Change;
+ 
++    /// `"chargingchange"`
++    #[cfg_attr(rust_js, rust_js::name = "chargingchange")]
++    pub struct Chargingchange;
++
++    /// `"chargingtimechange"`
++    #[cfg_attr(rust_js, rust_js::name = "chargingtimechange")]
++    pub struct Chargingtimechange;
++
+     /// `"click"`
+     #[cfg_attr(rust_js, rust_js::name = "click")]
+     pub struct Click;
+@@ -105294,6 +105428,10 @@ pub mod events {
+     #[cfg_attr(rust_js, rust_js::name = "deviceorientationabsolute")]
+     pub struct Deviceorientationabsolute;
+ 
++    /// `"dischargingtimechange"`
++    #[cfg_attr(rust_js, rust_js::name = "dischargingtimechange")]
++    pub struct Dischargingtimechange;
++
+     /// `"disconnect"`
+     #[cfg_attr(rust_js, rust_js::name = "disconnect")]
+     pub struct Disconnect;
+@@ -105478,6 +105616,10 @@ pub mod events {
+     #[cfg_attr(rust_js, rust_js::name = "leavepictureinpicture")]
+     pub struct Leavepictureinpicture;
+ 
++    /// `"levelchange"`
++    #[cfg_attr(rust_js, rust_js::name = "levelchange")]
++    pub struct Levelchange;
++
+     /// `"load"`
+     #[cfg_attr(rust_js, rust_js::name = "load")]
+     pub struct Load;
+@@ -106749,6 +106891,11 @@ pub mod svg_tags {
+     pub struct View;
+ }
+ 
++impl Listen<events::Chargingchange> for BatteryManager { type Event = Event; }
++impl Listen<events::Chargingtimechange> for BatteryManager { type Event = Event; }
++impl Listen<events::Dischargingtimechange> for BatteryManager { type Event = Event; }
++impl Listen<events::Levelchange> for BatteryManager { type Event = Event; }
++
+ impl Listen<events::DOMActivate> for Node { type Event = UIEvent; }
+ impl Listen<events::DOMFocusIn> for Node { type Event = FocusEvent; }
+ impl Listen<events::DOMFocusOut> for Node { type Event = FocusEvent; }
+@@ -121979,6 +122126,8 @@ impl SVGTag for svg_tags::Tspan { type Element = SVGTSpanElement; }
+ impl SVGTag for svg_tags::Use { type Element = SVGUseElement; }
+ impl SVGTag for svg_tags::View { type Element = SVGViewElement; }
+ 
++unsafe impl IsA<BatteryManager> for BatteryManager {}
++unsafe impl IsA<EventTarget> for BatteryManager {}
+ unsafe impl IsA<EventTarget> for EventTarget {}
+ unsafe impl IsA<Event> for Event {}
+ unsafe impl IsA<Node> for Node {}
+@@ -123685,6 +123834,8 @@ unsafe impl IsA<XPathExpression> for XPathExpression {}
+ unsafe impl IsA<XPathResult> for XPathResult {}
+ unsafe impl IsA<XSLTProcessor> for XSLTProcessor {}
+ 
++unsafe impl Defined for BatteryManager {}
++unsafe impl js::WeakKey for BatteryManager {}
+ unsafe impl Defined for EventTarget {}
+ unsafe impl js::WeakKey for EventTarget {}
+ unsafe impl Defined for Event {}
+@@ -125122,6 +125273,9 @@ unsafe impl js::WeakKey for XPathResult {}
+ unsafe impl Defined for XSLTProcessor {}
+ unsafe impl js::WeakKey for XSLTProcessor {}
+ 
++impl js::Classed for BatteryManager {
++    type Constructor = js::AnyConstructor;
++}
+ impl js::Classed for EventTarget {
+     type Constructor = js::AnyConstructor;
+ }

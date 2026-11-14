@@ -54,3 +54,6 @@ pub mod light_asset_math;
 pub mod light_assets;
 
 pub mod quality;
+
+pub mod frame_health;
+pub mod quality_signals;

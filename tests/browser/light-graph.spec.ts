@@ -71,7 +71,14 @@ for(const low of [false,true])for(const samples of [1,4])test('complete Rust lig
           const second=await snapshot(true);
           const alternate=actualPixels.map((image:Uint8Array,index:number)=>differences(image,second[index]));
           const self=first.map((image:Uint8Array,index:number)=>differences(image,second[index]));
-          diagnostics={initial,alternate,referenceSelf:self,inputs};
+          value(f.LightGraph.render(actual,device,actualRuntime,output.view,lastFrame));
+          const actualSecond=await snapshot(false);
+          const actualSelf=actualPixels.map((image:Uint8Array,index:number)=>differences(image,actualSecond[index]));
+          const repeatedCross=actualSecond.map((image:Uint8Array,index:number)=>differences(image,second[index]));
+          const differingBytes=actualPixels.map((image:Uint8Array,index:number)=>{
+            const details=[];for(let i=0;i<image.length&&details.length<12;i++)if(image[i]!==first[index][i])details.push({offset:i,actual:image[i],reference:first[index][i]});return details;
+          });
+          diagnostics={initial,alternate,referenceSelf:self,actualSelf,repeatedCross,differingBytes,inputs};
           // Native reference execution can vary at a small set of edge pixels.
           // Accept only an exact whole-frame match with identical packed inputs.
           if(inputs.uniforms.length===0&&inputs.prism===0&&inputs.spectral===0&&alternate.every((count:number)=>count===0))chosen=second;

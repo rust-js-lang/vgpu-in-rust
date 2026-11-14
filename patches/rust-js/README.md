@@ -1,7 +1,7 @@
 # Compiler fixes adopted upstream
 
 The published submodule gitlink is the authority for the compiler revision.
-There are no retained downstream patches. Earlier fixes remain in Git history.
+One downstream fix is retained for [#1790](https://github.com/rust-js-lang/rust-js/issues/1790): optional Battery Status API bindings. The canonical WebIDL generator, generated bindings, regression and documentation are included in 0001-battery-status.patch. Setup/compile applies it idempotently and refuses an unknown tree. Earlier fixes remain in Git history.
 
 | Issue | Published implementation |
 | --- | --- |

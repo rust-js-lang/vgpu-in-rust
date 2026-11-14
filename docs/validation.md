@@ -7,15 +7,15 @@ React leaves and GPU building blocks; they do not prove a completed landing page
 
 The published rust-js gitlink is
 `4c58cdcf6365ccafa799d2a1e634df989281c5cd` (2026-11-14), including the published
-#1784, #1785 and #1786 fixes. No downstream compiler patch remains;
-see patches/rust-js for their published replacements. No private compiler commit is the gitlink.
+#1784, #1785 and #1786 fixes. A downstream Battery Status API binding patch for #1790 is retained;
+see patches/rust-js for the patch and published replacements. No private compiler commit is the gitlink.
 The upstream nullable-promise, async-declaration, basic derived-Debug and native
 Error-family fixes are used unchanged.
 
 Passing application checks:
 
-- 28 native Rust tests and the same 28 compiled JavaScript tests.
-- 47 app tests with 161,374 assertions: scene optics, framing,
+- 32 native Rust tests and the same 32 compiled JavaScript tests.
+- 51 app tests with 453,164 assertions: scene optics, framing,
   interaction, exact rounded mesh vertices/topology, exact Float32 camera
   matrices, spectral layouts/vertices/flux, retained upload identity, native
   RangeErrors, React markup/context, retained assets, bloom kernels/pairing and
@@ -32,7 +32,9 @@ Passing application checks:
   claimed.
 - Invalid uniform values allocate no GPU resource. Rejected updates preserve the
   previous upload, and valid updates retain the same buffer.
-- 69 production-built Chromium checks. Ten cover setup-tab parity, copy/reset,
+- The preceding canvas checkpoint passed all 69 production-built Chromium checks.
+  The latest run passes 67/69; two exact GPU graph comparisons fail, as documented
+  below. This is an open browser gate, not a green suite. Ten cover setup-tab parity, copy/reset,
   rapid transitions, layout stability, unavailable/denied clipboard, reduced
   motion, mobile sizing and unmount cleanup. Fifty-seven require a real WebGPU adapter:
   all 44 retained shaders compile; malformed shader diagnostics work; the Rust
@@ -454,3 +456,46 @@ still historical, not a claim about this unmodified published compiler pin.
 Automatic GPU-tier/battery/runtime-health quality policy, React canvas/theme
 integration, the complete landing content, production build and public Pages
 deployment remain required.
+
+## Automatic quality policy core and open GPU comparison gate
+
+The pure frame-health monitor is ported from the pinned original: refresh-rate
+estimation, active two-second windows, workload-specific caps, inactivity resets
+and sticky downgrades. Source comparisons cover refresh rates, intentional frame
+skips, invalid deltas, reset timing and deterministic jitter (291,648 assertions).
+GPU-tier/battery predicates match original boundary decisions. These modules are
+not yet connected to BrowserRenderer; lazy advisory loading and cancellation,
+quality-state subscriptions and automatic transitions remain work.
+
+Native and compiled Rust now pass 32 tests; the app suite passes 51 tests and
+453,164 assertions. Strict rust-js Clippy passes. Plain cargo clippy was also
+tried: it reports JSX-only names as unused, as the guide documents; the canonical
+rust-js Clippy command checks their actual uses and passes in 7.56 s.
+
+The optional Battery Status API was absent from both the published pin and a
+newer local upstream checkout. A temporary native Rust probe failed with E0599.
+Issue #1790 records it. The app-private generator includes the battery-status
+spec and BatteryManager interface, retaining canonical promise/getter/event
+generation. One compiler regression passes (10 assertions); removing
+Navigator.get_battery makes it fail, and restoring the patch passes. The tracked
+patch includes that regression and the decision/guide amendment. A clean-tree
+application/reversal test passes. No broad compiler gate is claimed for this
+downstream patch. The published gitlink remains 4c58cdcf6.
+
+The latest complete browser run passes 67/69 in 30.3 s. High-quality dark graph
+(fallback bloom) differs in the wireframe background by 63 bytes. High-quality
+light graph differs in back-view wireframe background by 44 bytes, with 20
+output bytes differing. A repeated graph-only diagnostic run passes 23/24
+cases and reproduces the light difference with single-sample targets too.
+Packed uniform values, prism upload bytes and spectral vertices match. In this
+new observation both the Rust and original repeated frames are individually
+stable while still differing from one another (44/44/20 attachment bytes).
+This is stronger contrary evidence than the earlier reference-variation case:
+the earlier bounded reference redraw does not explain or accept this failure.
+No tolerance, retry-to-pass rule or relaxed assertion was added. Byte-level and
+self-comparison diagnostics now accompany the existing strict failures. GPU
+pipeline descriptors, emitted shaders and bound resources need comparison
+before attributing this to driver behavior or changing the oracle.
+
+These failures remain an explicit landing-page release gate. The pure policy
+checkpoint is published independently; no production deployment is claimed.

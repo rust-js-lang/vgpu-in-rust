@@ -78,3 +78,7 @@ canvas/device teardown. CanvasSurface owns device negotiation and swapchain
 configuration/rollback; capabilities owns optional features and bloom formats.
 EnvironmentTexture records its first frame timestamp so the browser clock keeps
 the source's preparation-time origin. Scene graphs continue to own GPU passes.
+
+FrameHealthMonitor owns active-window accounting and refresh estimation;
+quality_signals owns GPU-tier and battery threshold decisions. The browser
+controller will consume these decisions without rebuilding policy in DOM code.

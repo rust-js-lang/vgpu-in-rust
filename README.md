@@ -32,3 +32,8 @@ offscreen pauses, device negotiation and cancellation/cleanup. Tests use full
 Chromium (channel chromium); the headless shell loses native swapchain devices
 on this machine even for a plain WebGPU clear. The React landing root and
 remaining page sections are still in progress.
+
+The automatic-quality policy core now matches the original timing and advisory
+thresholds. Live Auto integration remains in progress. The latest browser run
+passes 67/69: exact dark/light debug-view GPU comparisons expose unresolved
+pixel differences. See docs/validation.md; the release gate remains open.
