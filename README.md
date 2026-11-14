@@ -12,10 +12,10 @@ See [UPSTREAM.md](UPSTREAM.md) for source provenance and [docs/implementation.md
 
 Use Bun. Clone with `git clone --recurse-submodules`. Run `bun run setup`, then `bun run compile`. Native scene checks: `cargo test -p vgpu-prism`.
 
-The current checkpoint contains scene mathematics, rounded prism geometry, initial React leaves, interactive setup tabs and the original shader assets. The GPU renderer, complete page and deployment remain in progress.
+The current checkpoint contains scene mathematics, rounded prism geometry, initial React leaves, interactive setup tabs, Rust WebGPU effect building blocks and the original shader assets. The GPU renderer, complete page and deployment remain in progress.
 
 Run `bun run test:native` and `bun run test:compiled` for the same Rust scene invariants on both runtimes. `bun run test` also compares generated modules with the original source. For those comparisons, keep the upstream repository in an adjacent `vgpu` directory at the revision in UPSTREAM.md, or set `VGPU_UPSTREAM_DIR` to that checkout. The test suite verifies its revision before comparing.
 
 See [docs/validation.md](docs/validation.md) for passing checks, failed attempts and remaining milestone gates.
 
-`bun run test:browser` builds isolated Rust/upstream tab fixtures and runs Chromium acceptance tests. This is component parity coverage, not the complete landing-page browser gate.
+`bun run test:browser` builds isolated Rust/upstream tab and shader fixtures. Thirteen Chromium checks cover tab parity/lifecycle and actual WebGPU compilation of all 44 retained shaders and exact fullscreen-pass pixel readback. An adapter is required; these tests do not silently pass a visual fallback. Scene rendering and the full landing-page browser gate remain pending.

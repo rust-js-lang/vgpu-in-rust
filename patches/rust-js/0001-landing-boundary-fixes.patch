@@ -1,0 +1,947 @@
+diff --git a/TESTS.md b/TESTS.md
+index 27c09e6..fd290f4 100644
+--- a/TESTS.md
++++ b/TESTS.md
+@@ -51,3 +51,11 @@ As of 2026-10-30, `main` at `120772e2`; times are CI's, check run 41022723550.
+ - **On the Mac**, each command has a timeout of about twice its usual time, and runs on all the cores: the suite in parallel groups took about 3 minutes (2026-10-30), the corpus in 8 parts 90 s (AGENTS.md). `bun run check:fast --all`, each file and each of the corpus's 12 parts a job of its pool, takes about 3 min with no change on the 12-core M6, the cores 92% busy, and about 6 min with an iterator change's rows (2026-11-07, DEVELOPMENT.md); run again where the compiler's build is the same, a change to the tests or the docs alone, about 1 min 50 s, each compile kept by its inputs given again (`test/compiles.ts`, ADR 1099, #874). Plain `bun run check:fast`, the inner loop's, runs each plain suite's file as a job and, by the test map (`bun run test-map`, about 130 s), only the files and corpus cases that ran a function the change touches: 53–74 s of a one-statement change to tidy, drops, the bindings or an iterator's code, 121 s to the runtime's with its iterator rows (2026-11-07, ADR 1101, #877); `test/test-map.test.ts` holds what a change picks.
+ 
+ To recount: the test totals are the `Ran N tests` lines in a check's `test (k/2)` logs. The corpus is `ls test/corpus/*.rs | wc -l`, the mutations are `grep -rc 'name:' scripts/mutations`, and the rustc counts are the line counts of `test/rustc-*.txt`.
++
++Downstream landing-port regressions (2026-11-14): three new files cover typed
++lazy storage, React hook handles (including React 18/19 refs), and async
++declaration payloads. A Cow AsRef/Borrow corpus case compares strings, slices,
++arrays, paths and both variants against native Rust. Six meaningful compiler
++mutations remain. Nullable browser promises and their regression are now owned
++by upstream b0bc0a3 (#1768), without a downstream override. Historical CI totals
++above are not recounted in this downstream checkout.
+diff --git a/docs/architecture.md b/docs/architecture.md
+index 9380df2..02e1ff3 100644
+--- a/docs/architecture.md
++++ b/docs/architecture.md
+@@ -679,3 +679,9 @@ Do not read current mechanisms as promises of:
+ 
+ Dispatcher and file-size caps are held in the architecture tests. Use those
+ checks and reports for current measurements rather than copying counts here.
++
++The lazy-value state schema is owned by lower/std_types/lazy.rs:
++INITIALIZER and STORAGE_STATES are consumed by operation lowering and
++declarations/cells.rs. The payload key is js::HELD. The JavaScript runtime's
++existing helper layout is held to this schema by declarations-lazy.test.ts,
++which forces generated Rust values and checks the actual pending/ready states.
+diff --git a/docs/decisions/0039-generic-bindings.md b/docs/decisions/0039-generic-bindings.md
+index afdb897..5056c9d 100644
+--- a/docs/decisions/0039-generic-bindings.md
++++ b/docs/decisions/0039-generic-bindings.md
+@@ -111,3 +111,25 @@ impl<T> SetState<T> {
+ ## Amended by
+ 
+ - [0373](0373-one-binding-form.md): A binding of a JS function is an ordinary function, and a JS type a struct
++
++## Amendment: hook handles retain their declared public types (2026-11-14, #1763)
++
++The shared handle macro carries binding metadata onto the type it defines.
++Dispatch, state actions, optimistic setters, ref objects and forwarded refs
++use the existing types attribute and declaration reader, just as React
++aliases already do. Optimistic setters name React's canonical
++Dispatch<SetStateAction<S>> type; this adds no competing type convention.
++
++A regression exports all five handle forms, checks strict TypeScript
++positive and negative callers, and verifies callback, object and ref
++identity at runtime. Ignoring the existing metadata reader is a caught
++mutation. Runtime representation is unchanged (ADR 0262 case A); no new
++Rust/JavaScript exception is introduced.
++
++Ref metadata follows the existing React version cfg facts: React 18 names
++the mutable exact-payload handle MutableRefObject<T>; React 19 names it
++RefObject<T>. The local DefinitelyTyped clone confirms that React 18's
++RefObject<T> instead has readonly current: T | null. A regression builds
++real React 18 Rust metadata and verifies the canonical alias plus strict
++mutable-payload callers. This preserves the Rust handle's API across
++supported React releases without adding another Rust ref type.
+diff --git a/docs/decisions/0196-typescript-declarations.md b/docs/decisions/0196-typescript-declarations.md
+index 781c302..1e0b0fb 100644
+--- a/docs/decisions/0196-typescript-declarations.md
++++ b/docs/decisions/0196-typescript-declarations.md
+@@ -248,3 +248,18 @@ method's rule of `tcx` alone, no catalog of its own. A crate's own enums
+ are declared as they were. `test/declarations-collections.test.ts` checks
+ TypeScript that narrows one against it, and one that reads its payload as
+ a number refused; mutations `cow-declared-any` and `cow-owned-unnormalized`.
++
++## Amendment: opaque Future payloads (#1769, 2026-11-14)
++
++An opaque Future, including the result of an async function, is declared as
++Promise of its associated Output. The existing opaque-type parts owner reads
++rustc's instantiated Future::Output bound, beside its FnOnce::Output query.
++Declarations consume that bound and use their existing type mapper for the
++payload. Unit output is Promise<void>; generic output stays Promise<T>.
++No emitted JavaScript shape is inspected or reconstructed.
++
++Case N (ADR 0262): runtime output is unchanged. This corrects a declaration
++that previously widened every async result to any. The regression compiles
++strict positive and negative TypeScript callers and checks actual resolved
++values for strings, numbers, unit, generic identity and an ordinary function
++returning impl Future. A mutation that hides the associated output is caught.
+diff --git a/docs/decisions/0318-lazy-cells.md b/docs/decisions/0318-lazy-cells.md
+index eebd0f8..defc7ba 100644
+--- a/docs/decisions/0318-lazy-cells.md
++++ b/docs/decisions/0318-lazy-cells.md
+@@ -61,3 +61,21 @@ function lookup(name) {
+   value, copy a number given as `&mut`, and refuse a `LazyLock` and a
+   `static` one.
+ - `docs/std-coverage.txt`: `LazyCell` 5 of 5, `LazyLock` 5 of 5.
++
++## Amendment: lazy storage is typed at module boundaries (2026-11-14, #1752)
++
++The lazy representation owner exposes its initializer key and the two
++storage states as a Pending/Ready enum: pending (a callable or poisoned/null
++initializer) and ready (a required payload and no active initializer).
++The enum owns required-member queries; independent booleans cannot describe
++an impossible third or fourth state. Declaration generation
++consumes this schema and the shared held-value key, instead of emitting any
++or keeping another property catalog. Lowering uses the same initializer key.
++The runtime helpers retain their established layout; a regression forces
++Rust-generated LazyCell and LazyLock values and checks both actual states
++against the declarations, testing the necessary JS-runtime mirror.
++
++Strict TypeScript callers accept numeric and structured payloads and reject
++wrong initializer returns, wrong payloads, and an object with neither state.
++Mutations make the ready payload optional or erase the initializer result
++type. Runtime representation is unchanged, ADR 0262 case A.
+diff --git a/docs/decisions/0319-cows.md b/docs/decisions/0319-cows.md
+index 12314f4..aac6630 100644
+--- a/docs/decisions/0319-cows.md
++++ b/docs/decisions/0319-cows.md
+@@ -65,3 +65,20 @@ too. The mutations `cow-texts-as-objects` (`cow.ts`),
+ `collected-cows-as-objects` (`lower/mir/iter/collect.ts`),
+ `extended-cows-as-objects` (`text.ts`), `joined-cows-as-lists` (`vec.ts`)
+ and `concat-cows-as-lists` (`combinators.ts`) are caught.
++
++## Amendment: generic AsRef and Borrow read the payload (2026-11-14, #1481)
++
++Std's AsRef<B> and Borrow<B> for Cow<B> now receive dictionaries whose
++method reads the same payload expression that Cow's Deref owner supplies.
++The target must equal that owner's borrowed type: Borrow<Cow<B>> remains
++the blanket self-borrow and returns the enum itself. No tag or positional
++field spelling is reconstructed by dictionaries.
++
++This lifts a refusal without changing Cow's representation, ADR 0262 case A.
++The native corpus comparison covers both variants, strings, slices, fixed
++arrays and paths, an owned mutation leaving the borrowed input unchanged,
++fixed-array identity, and borrowing a Cow as itself. Mutations remove the
++dictionary or return the enum instead of its payload. Borrow<Cow<B>> is
++covered by the native comparison as well; rustc's valid std impl selection
++and the existing self-borrow owner already ensure its target, so ignoring
++the redundant target guard at this later branch is an equivalent mutation.
+diff --git a/docs/guide/for-js-developers/collections.md b/docs/guide/for-js-developers/collections.md
+index da392f3..10d9e8a 100644
+--- a/docs/guide/for-js-developers/collections.md
++++ b/docs/guide/for-js-developers/collections.md
+@@ -1914,3 +1914,11 @@ export function titleOf(text) {
+ 
+ serde's attributes, `rename`, `tag`, `untagged`, `flatten`, `default`,
+ `skip`, work as serde's do ([ADR 0077](../../decisions/0077-serde-json.md)).
++
++## Copy-on-write references in generic code
++
++Cow of str, a slice, a fixed array or a path implements the usual AsRef and
++Borrow interfaces in generic code. Asking it for the borrowed payload type
++reads that payload for either variant; borrowing the Cow as itself gives
++the Cow. Its AsRef does not turn borrowed data into owned data. See
++[ADR 0319](../../decisions/0319-cows.md) and #1481.
+diff --git a/docs/guide/interop/async.md b/docs/guide/interop/async.md
+index 71b0ff6..bb84a81 100644
+--- a/docs/guide/interop/async.md
++++ b/docs/guide/interop/async.md
+@@ -162,6 +162,11 @@ The `js` crate has the rest of JS's `Promise`:
+ | `p.then(f, g)` | `p.then_with(f, g)`: each gives a value or a promise, as `catch`'s does ([ADR 0782](../../decisions/0782-a-promises-executor-borrows-and-then-takes-two-handlers.md)) |
+ | an `async` call handed on, not awaited | `js::promise(future)`: the future as the `Promise` it is |
+ 
++Exported async functions retain their resolved type in TypeScript declarations:
++`async fn names() -> Vec<String>` is declared `names(): Promise<string[]>`.
++An ordinary function returning `impl Future<Output = T>` likewise exposes
++`Promise<T>`. A unit output is `Promise<void>`; generic payloads stay generic.
++
+ ## Rejections
+ 
+ `.await` of a rejected promise throws, as a panic does: the `async fn`'s
+diff --git a/docs/guide/interop/types.md b/docs/guide/interop/types.md
+index 1cef2a0..4619e15 100644
+--- a/docs/guide/interop/types.md
++++ b/docs/guide/interop/types.md
+@@ -3900,3 +3900,13 @@ export function greet(name: string, greeting?: string | null | undefined): strin
+ 
+ A JS type's declaration is its `#[rust_js::types]`; one without is `any`.
+ See [Export Rust APIs to JavaScript](export-to-javascript.md).
++
++## LazyCell and LazyLock declarations
++
++An exported lazy value retains its payload type. Before initialization its
++initializer is callable, or null while initializing/poisoned; after a
++successful initialization its payload is required and the initializer is
++undefined. The declaration is the union of those storage states. An empty
++object, a wrong initializer result, and a wrong payload are rejected by
++TypeScript. Both standard lazy types use the same representation schema
++([ADR 0318](../../decisions/0318-lazy-cells.md), amended, #1752).
+diff --git a/docs/guide/react/hooks.md b/docs/guide/react/hooks.md
+index 417c16e..4965d86 100644
+--- a/docs/guide/react/hooks.md
++++ b/docs/guide/react/hooks.md
+@@ -67,6 +67,15 @@ Ownership is how React's rule looks in Rust: a handler can't mutate the
+ state it was given, which in JS would change React's copy and not render.
+ Make a new value and `set` it.
+ 
++Exported hook handles keep React's generic TypeScript types:
++`Dispatch<SetStateAction<T>>` for state setters, `Dispatch<A>` for actions,
++and `RefObject<T>` and `ForwardedRef<T>` for refs. `SetOptimistic<S>` is
++declared as React's `Dispatch<SetStateAction<S>>`. The emitted declarations
++retain the state, action and ref payload types, and runtime handles keep
++their original identity. On React 18, the Rust ref handle is declared as
++`MutableRefObject<T>`; on React 19 and later it is `RefObject<T>`. Both keep
++the writable `current` property and its exact payload type.
++
+ ## `use_effect`
+ 
+ `use_effect(effect, deps)` runs `effect` after a render. `deps` says when:
+diff --git a/react/src/lib.rs b/react/src/lib.rs
+index 3fc9f25..33fa7a1 100644
+--- a/react/src/lib.rs
++++ b/react/src/lib.rs
+@@ -744,8 +744,8 @@ impl FormAction<DispatchAction> for Dispatch<&'static webapi::FormData> {}
+ /// Declares a JS function a hook gives back, `setCount` or `dispatch`: a
+ /// `Copy` handle, called with `this()` (ADR 0039).
+ macro_rules! handle {
+-    ($(#[doc = $doc:literal])* $name:ident<$t:ident>) => {
+-        $(#[doc = $doc])*
++    ($(#[$attribute:meta])* $name:ident<$t:ident>) => {
++        $(#[$attribute])*
+         pub struct $name<$t>(PhantomData<JsObject>, PhantomData<$t>);
+ 
+         impl<$t> Clone for $name<$t> {
+@@ -778,6 +778,7 @@ pub fn use_state<T>(initial: impl FnOnce() -> T) -> (&'static T, &'static Dispat
+ /// What [`use_state`]'s setter takes, as @types/react's `SetStateAction<S>`:
+ /// a value, `set`, or a function of the previous one, `update`. Its setter
+ /// is a `Dispatch<SetStateAction<T>>`, React's `setCount`.
++#[cfg_attr(rust_js, rust_js::types = "react#SetStateAction<T>")]
+ pub struct SetStateAction<T>(PhantomData<T>);
+ 
+ impl<T> Dispatch<SetStateAction<T>> {
+@@ -846,6 +847,7 @@ pub fn use_reducer_with<S, A, I>(
+ handle! {
+     /// What sends an action: React's `dispatch`, from [`use_reducer`] and
+     /// [`use_action_state`].
++    #[cfg_attr(rust_js, rust_js::types = "react#Dispatch<A>")]
+     Dispatch<A>
+ }
+ 
+@@ -907,6 +909,7 @@ pub fn use_optimistic_with<S, A>(value: S, reducer: impl Fn(&S, A) -> S + 'stati
+ 
+ handle! {
+     /// What [`use_optimistic`] gives to set the optimistic state.
++    #[cfg_attr(rust_js, rust_js::types = "react#Dispatch<react#SetStateAction<S>>")]
+     SetOptimistic<S>
+ }
+ 
+@@ -945,6 +948,8 @@ pub fn use_ref<T>(initial: T) -> RefObject<T> {
+ 
+ handle! {
+     /// What [`use_ref`] gives: `{ current }`.
++    #[cfg_attr(all(rust_js, react = "19.0"), rust_js::types = "react#RefObject<T>")]
++    #[cfg_attr(all(rust_js, not(react = "19.0")), rust_js::types = "react#MutableRefObject<T>")]
+     RefObject<T>
+ }
+ 
+@@ -1965,6 +1970,7 @@ handle! {
+     /// The ref a [`forward_ref`] component's parent gave: a callback, a
+     /// [`RefObject`], or none, to give on as an element's `ref` or to
+     /// [`use_imperative_handle`].
++    #[cfg_attr(rust_js, rust_js::types = "react#ForwardedRef<H>")]
+     ForwardedRef<H>
+ }
+ 
+diff --git a/scripts/mutations/lower/declarations/cells.ts b/scripts/mutations/lower/declarations/cells.ts
+index ae6e267..ccd96c9 100644
+--- a/scripts/mutations/lower/declarations/cells.ts
++++ b/scripts/mutations/lower/declarations/cells.ts
+@@ -3,6 +3,28 @@
+ import type { Mutation } from "../../../mutations";
+ 
+ export const mutations: Mutation[] = [
++{
++  "name": "lazy-ready-payload-optional",
++  "breaks": "an empty object is admitted as an initialized lazy cell without its payload (#1752)",
++  "file": "src/lower/declarations/cells.rs",
++  "find": "{ \"kind\": \"property\", \"name\": crate::js::HELD, \"optional\": !state.requires_payload(), \"readonly\": false, \"type\": value }",
++  "replace": "{ \"kind\": \"property\", \"name\": crate::js::HELD, \"optional\": true, \"readonly\": false, \"type\": value }",
++  "tests": [
++    "test/declarations-lazy.test.ts"
++  ]
++},
++
++{
++  "name": "lazy-initializer-payload-any",
++  "breaks": "a lazy initializer can return the wrong payload type without a TypeScript error (#1752)",
++  "file": "src/lower/declarations/cells.rs",
++  "find": "json!({ \"kind\": \"function\", \"typeParameters\": [], \"params\": [], \"returns\": payload.clone() })",
++  "replace": "json!({ \"kind\": \"function\", \"typeParameters\": [], \"params\": [], \"returns\": keyword(\"any\") })",
++  "tests": [
++    "test/declarations-lazy.test.ts"
++  ]
++},
++
+   {
+     name: "cell-option-unwritten",
+     breaks:
+diff --git a/scripts/mutations/lower/declarations/parts.ts b/scripts/mutations/lower/declarations/parts.ts
+index f074183..d02e340 100644
+--- a/scripts/mutations/lower/declarations/parts.ts
++++ b/scripts/mutations/lower/declarations/parts.ts
+@@ -2,6 +2,14 @@
+ import type { Mutation } from "../../../mutations";
+ 
+ export const mutations: Mutation[] = [
++  {
++    name: "opaque-future-output-ignored",
++    breaks: "an async export loses its resolved payload and becomes any",
++    file: "src/lower/declarations/parts.rs",
++    find: ".find(|projection| tcx.is_lang_item(projection.def_id(), LangItem::FutureOutput))",
++    replace: ".find(|_projection| false)",
++    tests: ["test/declarations-async.test.ts"],
++  },
+   {
+     name: "chain-keys-not-followed",
+     breaks: "a name shadowed down the chain, `className`, isn't omitted",
+diff --git a/scripts/mutations/lower/declarations/written.ts b/scripts/mutations/lower/declarations/written.ts
+index a62b218..417273e 100644
+--- a/scripts/mutations/lower/declarations/written.ts
++++ b/scripts/mutations/lower/declarations/written.ts
+@@ -2,6 +2,14 @@
+ import type { Mutation } from "../../../mutations";
+ 
+ export const mutations: Mutation[] = [
++  {
++    name: "written-binding-type-ignored",
++    breaks: "opaque React hook handles lose their declared generic types and become any (#1763)",
++    file: "src/lower/declarations/written.rs",
++    find: "        Ok(written) => Some(written),",
++    replace: "        Ok(_) => None,",
++    tests: ["test/declarations-react-handles.test.ts"],
++  },
+   {
+     name: "written-keyword-reference",
+     breaks:
+diff --git a/scripts/mutations/lower/traits/dictionaries.ts b/scripts/mutations/lower/traits/dictionaries.ts
+index c10b4a5..e69893e 100644
+--- a/scripts/mutations/lower/traits/dictionaries.ts
++++ b/scripts/mutations/lower/traits/dictionaries.ts
+@@ -2,6 +2,26 @@
+ import type { Mutation } from "../../../mutations";
+ 
+ export const mutations: Mutation[] = [
++  {
++    name: "cow-borrow-dictionary-missing",
++    breaks: "Cow given as AsRef or Borrow is refused again (#1481)",
++    file: "src/lower/traits/dictionaries.rs",
++    find: "        if let Some(method) = cow_method\n",
++    replace: "        if let Some(method) = None::<&str>\n",
++    tests: ["test/corpus.test.ts", "-t", "^cow_as_ref_borrow.rs$"],
++  },
++  {
++    name: "cow-borrow-dictionary-reads-enum",
++    breaks:
++      "Cow AsRef/Borrow returns the tagged enum rather than its payload (#1481)",
++    file: "src/lower/traits/dictionaries.rs",
++    find: '            let read = Expr::arrow(\n                vec!["value".into()],\n                vec![StmtKind::Return(Some(value)).at(js::Span::NONE)],\n            );',
++    replace:
++      '            let read = Expr::arrow(\n                vec!["value".into()],\n                vec![StmtKind::Return(Some(Expr::var("value"))).at(js::Span::NONE)],\n            );',
++    tests: ["test/corpus.test.ts", "-t", "^cow_as_ref_borrow.rs$"],
++  },
++
++
+   {
+     name: "deque-a-generic-reader",
+     breaks: "a `VecDeque<u8>` given to generic code as its reader is given `$dequeReader`, which has no `read` or `fill_buf`, where it's refused (#1302)",
+diff --git a/src/lower/declarations.rs b/src/lower/declarations.rs
+index acd441a..fbdcdf9 100644
+--- a/src/lower/declarations.rs
++++ b/src/lower/declarations.rs
+@@ -38,7 +38,7 @@ use super::representation::{SignatureForms, held_ts as held};
+ use classes::exported_class;
+ use comments::documented;
+ pub(in crate::lower) use comments::jsdoc_of;
+-use parts::{flattened_keys, opaque_fn_signature};
++use parts::{flattened_keys, opaque_fn_signature, opaque_future_output};
+ 
+ pub use written::validate_types;
+ use written::{Member, Signature};
+@@ -1123,6 +1123,21 @@ impl<'tcx> Declarations<'_, 'tcx> {
+             {
+                 self.written(t, &declared, ty::List::empty())
+             }
++            // An opaque Future is the JS promise its Output resolves to.
++            ty::Alias(
++                _,
++                alias @ ty::AliasTy {
++                    kind: ty::Opaque { .. },
++                    ..
++                },
++            ) if let Some(output) = opaque_future_output(tcx, *alias) => {
++                let payload = if output.is_unit() {
++                    keyword("void")
++                } else {
++                    self.ts(output)
++                };
++                reference("Promise", vec![payload])
++            }
+             // An `impl Fn(A) -> R` a function gives: the function it says, as
+             // a parameter's is, `cache`'s `(...args: unknown[]) => unknown`.
+             ty::Alias(
+@@ -1186,6 +1201,9 @@ impl<'tcx> Declarations<'_, 'tcx> {
+                 {
+                     return reference("Set", vec![self.ts(args.type_at(0))]);
+                 }
++                if is_std_def(tcx, did, StdItem::LazyCell) {
++                    return self.lazy(args.type_at(0));
++                }
+                 if ty.is_box() {
+                     return self.ts(args.type_at(0));
+                 }
+diff --git a/src/lower/declarations/cells.rs b/src/lower/declarations/cells.rs
+index 94e9bce..aeb192a 100644
+--- a/src/lower/declarations/cells.rs
++++ b/src/lower/declarations/cells.rs
+@@ -9,9 +9,34 @@ use rustc_hir::def::{DefKind, Res};
+ use rustc_middle::ty::{self, Ty};
+ 
+ use super::super::recognition::{StdItem, is_std_def};
+-use super::Declarations;
++use super::{Declarations, keyword, or_undefined, union};
++use serde_json::{Value, json};
+ 
+ impl<'tcx> Declarations<'_, 'tcx> {
++    /// The std lazy owner's state schema, parameterized by the payload type.
++    pub(super) fn lazy(&mut self, item: Ty<'tcx>) -> Value {
++        let payload = self.ts(item);
++        let states = super::super::std_types::lazy::STORAGE_STATES.iter().map(|state| {
++            let initializer = if state.requires_initializer() {
++                union(vec![
++                    json!({ "kind": "function", "typeParameters": [], "params": [], "returns": payload.clone() }),
++                    keyword("null"),
++                ])
++            } else {
++                keyword("undefined")
++            };
++            let value = if state.requires_payload() { payload.clone() } else { or_undefined(payload.clone()) };
++            json!({
++                "kind": "object",
++                "members": [
++                    { "kind": "property", "name": super::super::std_types::lazy::INITIALIZER, "optional": !state.requires_initializer(), "readonly": false, "type": initializer },
++                    { "kind": "property", "name": crate::js::HELD, "optional": !state.requires_payload(), "readonly": false, "type": value },
++                ],
++            })
++        }).collect();
++        union(states)
++    }
++
+     /// `Option<T>`'s `T` as written, where `written` is one, or a `Cell`'s or
+     /// a `RefCell`'s of one, the `Option` a field's cell holds (rd414).
+     pub(super) fn written_option<'h>(&self, written: &'h hir::Ty<'tcx>) -> Option<&'h hir::Ty<'tcx>> {
+diff --git a/src/lower/declarations/parts.rs b/src/lower/declarations/parts.rs
+index 5c93b19..f8be6db 100644
+--- a/src/lower/declarations/parts.rs
++++ b/src/lower/declarations/parts.rs
+@@ -35,6 +35,19 @@ pub(super) fn opaque_fn_signature<'tcx>(
+     Some((inputs?, output))
+ }
+ 
++/// What an opaque Future resolves to, including an async function's result.
++/// Read rustc's instantiated associated Output bound, as opaque_fn_signature
++/// reads FnOnce::Output; never infer a payload from the generated JS.
++pub(super) fn opaque_future_output<'tcx>(tcx: TyCtxt<'tcx>, alias: ty::AliasTy<'tcx>) -> Option<Ty<'tcx>> {
++    let ty::Opaque { def_id } = alias.kind else { return None };
++    tcx.explicit_item_bounds(def_id)
++        .iter_instantiated_copied(tcx, alias.args)
++        .filter_map(|bound| bound.skip_normalization().0.as_projection_clause())
++        .map(|bound| bound.skip_binder())
++        .find(|projection| tcx.is_lang_item(projection.def_id(), LangItem::FutureOutput))
++        .and_then(|projection| projection.term.as_type())
++}
++
+ /// The JS names of `ty`'s fields, a flattened struct's, or one's it
+ /// refers to, and of those of the flattened struct in it (ADR 0205).
+ pub(super) fn flattened_keys<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Vec<String> {
+diff --git a/src/lower/std_types/lazy.rs b/src/lower/std_types/lazy.rs
+index 2c4d30e..65aaff0 100644
+--- a/src/lower/std_types/lazy.rs
++++ b/src/lower/std_types/lazy.rs
+@@ -9,6 +9,28 @@ use crate::lower::temporary_names::Role;
+ use crate::lower::{FnCx, R};
+ use rustc_middle::ty;
+ 
++/// The initializer's member name, shared by lowering and declarations.
++pub(in crate::lower) const INITIALIZER: &str = "init";
++
++/// The two observable storage states. Pending includes initialization and
++/// poisoning: its initializer is callable or null; a ready cell holds a value.
++pub(in crate::lower) enum StorageState {
++    Pending,
++    Ready,
++}
++
++impl StorageState {
++    pub(in crate::lower) fn requires_initializer(&self) -> bool {
++        matches!(self, Self::Pending)
++    }
++
++    pub(in crate::lower) fn requires_payload(&self) -> bool {
++        matches!(self, Self::Ready)
++    }
++}
++
++pub(in crate::lower) const STORAGE_STATES: [StorageState; 2] = [StorageState::Pending, StorageState::Ready];
++
+ /// A `LazyCell`'s or `LazyLock`'s own functions, and its `Deref`.
+ #[derive(Clone, Copy, PartialEq)]
+ pub(in crate::lower) enum LazyOp {
+@@ -47,7 +69,7 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+         };
+         let lazy = values.next().expect("rustc checked the arguments");
+         if op == LazyOp::New {
+-            return Ok(Some(Expr::object(vec![Prop::Field("init".into(), lazy)])));
++            return Ok(Some(Expr::object(vec![Prop::Field(INITIALIZER.into(), lazy)])));
+         }
+         // A `LazyLock`'s init that uses it deadlocks in Rust: rust-js's error.
+         let force = match self.recognition().is_lock_cell(tys[0].peel_refs()) {
+@@ -80,7 +102,7 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+             LazyOp::Get if self.boxed_payload(item) => self.some(Expr::held(lazy.clone())),
+             _ => Expr::held(lazy.clone()),
+         };
+-        let made = Expr::bin(Op::Eq, Expr::member(lazy, "init"), Expr::undefined());
++        let made = Expr::bin(Op::Eq, Expr::member(lazy, INITIALIZER), Expr::undefined());
+         Ok(Some(Expr::cond(made, given, Expr::undefined())))
+     }
+ }
+diff --git a/src/lower/traits/dictionaries.rs b/src/lower/traits/dictionaries.rs
+index 8b9417e..6384762 100644
+--- a/src/lower/traits/dictionaries.rs
++++ b/src/lower/traits/dictionaries.rs
+@@ -823,6 +823,30 @@ impl<'a, 'tcx> FnCx<'a, 'tcx> {
+                 )]));
+             }
+         }
++        // Cow borrows its payload through Deref, for both AsRef and Borrow
++        // (#1481). Ask the Cow owner for the expression and borrowed type;
++        // its tag and positional field never get reconstructed here.
++        let cow_method = if is_std_def(self.tcx, tr.def_id, StdItem::AsRef) {
++            Some("as_ref")
++        } else if is_std_def(self.tcx, tr.def_id, StdItem::Borrow) {
++            Some("borrow")
++        } else {
++            None
++        };
++        if let Some(method) = cow_method
++            && !self.has_user_impl(tr.def_id, ty)
++            && let Some((value, borrowed)) = self.cow_deref(&Expr::var("value"), ty)
++            && borrowed == tr.args.type_at(1)
++        {
++            let read = Expr::arrow(
++                vec!["value".into()],
++                vec![StmtKind::Return(Some(value)).at(js::Span::NONE)],
++            );
++            return Ok(Expr::object(vec![Prop::Field(
++                bindings::trait_method_name(self.tcx, tr.def_id, method),
++                read,
++            )]));
++        }
+         if is_std_def(self.tcx, tr.def_id, StdItem::AsRef)
+             && !self.has_user_impl(tr.def_id, ty)
+             && self.recognition().as_ref_is_itself(ty, tr.args.type_at(1))
+diff --git a/test/corpus/cow_as_ref_borrow.js b/test/corpus/cow_as_ref_borrow.js
+new file mode 100644
+index 0000000..7188147
+--- /dev/null
++++ b/test/corpus/cow_as_ref_borrow.js
+@@ -0,0 +1,95 @@
++// Generated by rust-js from test/corpus/cow_as_ref_borrow.rs. Do not edit.
++
++import { $at, $displayF32, $index } from "@rust-js/std";
++
++export function entry() {
++  main();
++}
++
++function upper(value, TAsRefStr) {
++  return TAsRefStr.asRef(value).toUpperCase();
++}
++
++function text(value, TBorrowStr) {
++  return TBorrowStr.borrow(value);
++}
++
++function first(value, TAsRefI32Slice) {
++  return $index(TAsRefI32Slice.asRef(value), 0);
++}
++
++function sum(value, TBorrowI32Slice) {
++  return TBorrowI32Slice.borrow(value).reduce((a, b) => (a + b) | 0, 0);
++}
++
++function matrix(value, TAsRef_f32__16_) {
++  return TAsRef_f32__16_.asRef(value)[3];
++}
++
++function path(value, TAsRefPath) {
++  return TAsRefPath.asRef(value);
++}
++
++function borrowedPath(value, TBorrowPath) {
++  return TBorrowPath.borrow(value);
++}
++
++function borrowItself(value, TBorrowT) {
++  return value;
++}
++
++function main() {
++  const cowBorrow = { borrow: (value) => value._0 };
++  const cowAsRef = { asRef: (value) => value._0 };
++  for (const value of [
++    { TAG: "Borrowed", _0: "bird" },
++    { TAG: "Owned", _0: "orange" },
++  ]) {
++    console.log(`${upper(value, cowAsRef)} ${text(value, cowBorrow)}`);
++  }
++  const source = [1, 2, 3];
++  const borrowed = { TAG: "Borrowed", _0: source };
++  if (borrowItself(borrowed, { borrow: (value) => value }) !== borrowed) {
++    throw new Error("assertion failed: std::ptr::eq(borrow_itself(&borrowed), &borrowed)");
++  }
++  const owned = { TAG: "Owned", _0: [4, 5, 6] };
++  console.log(
++    `${first(
++      borrowed.TAG === "Borrowed"
++        ? { ...borrowed }
++        : borrowed.TAG === "Owned"
++          ? { ...borrowed, _0: borrowed._0.slice() }
++          : borrowed,
++      cowAsRef,
++    )} ${sum(borrowed, cowBorrow)} ${first(
++      owned.TAG === "Borrowed"
++        ? { ...owned }
++        : owned.TAG === "Owned"
++          ? { ...owned, _0: owned._0.slice() }
++          : owned,
++      cowAsRef,
++    )} ${sum(owned, cowBorrow)}`,
++  );
++  if (owned.TAG === "Borrowed") {
++    owned.TAG = "Owned";
++    owned._0 = owned._0.slice();
++  }
++  owned._0[$at(owned._0, 0)] = 7;
++  console.log(`[${source.join(", ")}] ${sum(owned, cowBorrow)}`);
++  const values = new Array(16).fill(2);
++  const borrowedMatrix = { TAG: "Borrowed", _0: values };
++  const ownedMatrix = { TAG: "Owned", _0: new Array(16).fill(3) };
++  console.log(
++    `${$displayF32(matrix(borrowedMatrix, cowAsRef))} ${$displayF32(matrix(ownedMatrix, cowAsRef))}`,
++  );
++  if (borrowedMatrix._0 !== values) {
++    throw new Error("assertion failed: std::ptr::eq(borrowed_matrix.as_ref(), &values)");
++  }
++  for (const value of [
++    { TAG: "Borrowed", _0: "a/b" },
++    { TAG: "Owned", _0: "c/d" },
++  ]) {
++    console.log(`${path(value, cowAsRef)} ${borrowedPath(value, cowBorrow)}`);
++  }
++}
++//# sourceMappingURL=case.js.map
+diff --git a/test/corpus/cow_as_ref_borrow.rs b/test/corpus/cow_as_ref_borrow.rs
+new file mode 100644
+index 0000000..e00d7b1
+--- /dev/null
++++ b/test/corpus/cow_as_ref_borrow.rs
+@@ -0,0 +1,63 @@
++// A Cow's AsRef and Borrow dictionaries expose its payload, not its enum tag.
++// Regression for #1481: both borrowed and owned variants in generic code.
++use std::borrow::{Borrow, Cow};
++use std::path::{Path, PathBuf};
++
++fn upper<T: AsRef<str>>(value: T) -> String {
++    value.as_ref().to_uppercase()
++}
++
++fn text<T: Borrow<str>>(value: &T) -> String {
++    value.borrow().to_owned()
++}
++
++fn first<T: AsRef<[i32]>>(value: T) -> i32 {
++    value.as_ref()[0]
++}
++
++fn sum<T: Borrow<[i32]>>(value: &T) -> i32 {
++    value.borrow().iter().sum()
++}
++
++fn matrix<T: AsRef<[f32; 16]>>(value: &T) -> f32 {
++    value.as_ref()[3]
++}
++
++fn path<T: AsRef<Path>>(value: T) -> String {
++    value.as_ref().display().to_string()
++}
++
++fn borrowed_path<T: Borrow<Path>>(value: &T) -> String {
++    value.borrow().display().to_string()
++}
++
++fn borrow_itself<T: Borrow<T>>(value: &T) -> &T {
++    value.borrow()
++}
++
++fn main() {
++    for value in [Cow::Borrowed("bird"), Cow::Owned(String::from("orange"))] {
++        println!("{} {}", upper(value.clone()), text(&value));
++    }
++    let source = [1, 2, 3];
++    let borrowed: Cow<'_, [i32]> = Cow::Borrowed(&source);
++    assert!(std::ptr::eq(borrow_itself(&borrowed), &borrowed));
++    let mut owned: Cow<'_, [i32]> = Cow::Owned(vec![4, 5, 6]);
++    println!(
++        "{} {} {} {}",
++        first(borrowed.clone()),
++        sum(&borrowed),
++        first(owned.clone()),
++        sum(&owned)
++    );
++    owned.to_mut()[0] = 7;
++    println!("{:?} {}", source, sum(&owned));
++    let values = [2.0; 16];
++    let borrowed_matrix: Cow<'_, [f32; 16]> = Cow::Borrowed(&values);
++    let owned_matrix: Cow<'_, [f32; 16]> = Cow::Owned([3.0; 16]);
++    println!("{} {}", matrix(&borrowed_matrix), matrix(&owned_matrix));
++    assert!(std::ptr::eq(borrowed_matrix.as_ref(), &values));
++    for value in [Cow::Borrowed(Path::new("a/b")), Cow::Owned(PathBuf::from("c/d"))] {
++        println!("{} {}", path(value.clone()), borrowed_path(&value));
++    }
++}
+diff --git a/test/declarations-async.test.ts b/test/declarations-async.test.ts
+new file mode 100644
+index 0000000..bf7b96f
+--- /dev/null
++++ b/test/declarations-async.test.ts
+@@ -0,0 +1,52 @@
++// Async exports expose their actual resolved payload to TypeScript callers.
++import {expect,test} from "bun:test";
++import {readFileSync,writeFileSync} from "node:fs";
++import {join} from "node:path";
++import {compiler,fixture,root,run} from "./support";
++
++test("async and opaque Future declarations preserve their promise payloads",async()=>{
++  const dir=fixture("declarations-async");
++  writeFileSync(join(dir,"lib.rs"),`pub async fn names() -> Vec<String> { vec!["first".to_string()] }
++pub async fn count() -> u32 { 42 }
++pub async fn done() {}
++pub async fn echo<T>(value: T) -> T { value }
++pub fn later() -> impl std::future::Future<Output = Vec<String>> { async { vec!["later".to_string()] } }
++pub fn immediate() -> u32 { 7 }
++`);
++  run([compiler,"--declarations",join(dir,"lib.rs"),"-o",join(dir,"lib.js")]);
++  const declaration=readFileSync(join(dir,"lib.d.ts"),"utf8");
++  expect(declaration).toContain("export function names(): Promise<string[]>;");
++  expect(declaration).toContain("export function count(): Promise<number>;");
++  expect(declaration).toContain("export function done(): Promise<void>;");
++  expect(declaration).toContain("export function echo<T>(value: T): Promise<T>;");
++  expect(declaration).toContain("export function later(): Promise<string[]>;");
++  expect(declaration).toContain("export function immediate(): number;");
++  writeFileSync(join(dir,"use.ts"),`import {names,count,done,echo,later,immediate} from "./lib.js";
++const n: Promise<string[]> = names();
++const c: Promise<number> = count();
++const d: Promise<void> = done();
++const e: Promise<{name:string}> = echo({name:"hello"});
++const l: Promise<string[]> = later();
++const i: number = immediate();
++// @ts-expect-error async payload is strings, never numbers
++const badNames: Promise<number[]> = names();
++// @ts-expect-error async results must be awaited
++const badCount: number = count();
++// @ts-expect-error generic async payload stays exact
++const badEcho: Promise<number> = echo("text");
++// @ts-expect-error opaque Future has a concrete payload too
++const badLater: Promise<boolean> = later();
++`);
++  writeFileSync(join(dir,"tsconfig.json"),JSON.stringify({compilerOptions:{module:"esnext",moduleResolution:"bundler",strict:true,noEmit:true,skipLibCheck:false,typeRoots:[join(root,"node_modules/@types")]},files:["use.ts"]}));
++  const checked=Bun.spawnSync([process.execPath,join(root,"node_modules/typescript/bin/tsc"),"-p",join(dir,"tsconfig.json")],{timeout:30000,stdout:"pipe",stderr:"pipe"});
++  expect(checked.stdout.toString()+checked.stderr.toString()).toBe("");
++  expect(checked.exitCode).toBe(0);
++  const lib=await import(join(dir,"lib.js"));
++  expect(await lib.names()).toEqual(["first"]);
++  expect(await lib.count()).toBe(42);
++  expect(await lib.done()).toBeUndefined();
++  const object={name:"hello"};
++  expect(await lib.echo(object)).toBe(object);
++  expect(await lib.later()).toEqual(["later"]);
++  expect(lib.immediate()).toBe(7);
++});
+diff --git a/test/declarations-lazy.test.ts b/test/declarations-lazy.test.ts
+new file mode 100644
+index 0000000..d9abff9
+--- /dev/null
++++ b/test/declarations-lazy.test.ts
+@@ -0,0 +1,52 @@
++
++import {expect,test} from "bun:test";
++import {readFileSync,writeFileSync} from "node:fs";
++import {join} from "node:path";
++import {compiler,fixture,root,run} from "./support";
++
++test("lazy cells and locks declare their initializer and payload states",async()=>{
++  const dir=fixture("declarations-lazy");
++  writeFileSync(join(dir,"lib.rs"),`use std::cell::LazyCell;
++use std::sync::LazyLock;
++
++pub struct Point { pub x: f64, pub y: f64 }
++pub static ORIGIN: LazyLock<Point> = LazyLock::new(|| Point { x: 0.0, y: 0.0 });
++pub fn numbers() -> LazyCell<Vec<u32>> { LazyCell::new(|| vec![1,2,3]) }
++pub fn hold<T>(cell: LazyCell<T>) -> LazyCell<T> { cell }
++pub fn origin() -> &'static Point { &ORIGIN }
++pub fn force_numbers(cell: &LazyCell<Vec<u32>>) -> &Vec<u32> { LazyCell::force(cell) }
++`);
++  run([compiler,"--declarations",join(dir,"lib.rs"),"-o",join(dir,"lib.js")],30_000);
++  const dts=readFileSync(join(dir,"lib.d.ts"),"utf8");
++  expect(dts).not.toMatch(/\bany\b/);
++  writeFileSync(join(dir,"use.ts"),`import {ORIGIN,numbers,hold} from "./lib.js";
++const point: {x:number;y:number}|undefined = ORIGIN.value;
++const initialized: {x:number;y:number}|undefined = ORIGIN.init?.();
++const values: number[]|undefined = numbers().value;
++const value: number|undefined = hold({init:()=>42}).value;
++const ready = hold<number>({value:42});
++const poisoned = hold<number>({init:null});
++// @ts-expect-error The initializer must produce a point.
++const badInit: typeof ORIGIN = {init:()=>123};
++// @ts-expect-error A ready payload must be a point.
++const badPayload: typeof ORIGIN = {value:"x"};
++// @ts-expect-error No initializer and no payload is not a valid lazy state.
++const empty: typeof ORIGIN = {};
++`);
++  writeFileSync(join(dir,"tsconfig.json"),JSON.stringify({compilerOptions:{module:"esnext",moduleResolution:"bundler",strict:true,noEmit:true,skipLibCheck:false,exactOptionalPropertyTypes:true,typeRoots:[join(root,"node_modules/@types")]},files:["use.ts"]}));
++  const checked=Bun.spawnSync([process.execPath,join(root,"node_modules/typescript/bin/tsc"),"-p",join(dir,"tsconfig.json")],{timeout:30_000});
++  expect(checked.stdout.toString()+checked.stderr.toString()).toBe("");
++  expect(checked.exitCode).toBe(0);
++  const generated=await import(join(dir,"lib.js"));
++  expect(typeof generated.ORIGIN.init).toBe("function");
++  const point=generated.origin();
++  expect(point).toEqual({x:0,y:0});
++  expect(generated.ORIGIN.value).toBe(point);
++  expect(generated.ORIGIN.init).toBeUndefined();
++  const cell=generated.numbers();
++  expect(typeof cell.init).toBe("function");
++  const values=generated.forceNumbers(cell);
++  expect(values).toEqual([1,2,3]);
++  expect(cell.value).toBe(values);
++  expect(cell.init).toBeUndefined();
++});
+diff --git a/test/declarations-react-handles.test.ts b/test/declarations-react-handles.test.ts
+new file mode 100644
+index 0000000..8858a6d
+--- /dev/null
++++ b/test/declarations-react-handles.test.ts
+@@ -0,0 +1,82 @@
++import {expect,test} from "bun:test";
++import {mkdirSync,readFileSync,writeFileSync} from "node:fs";
++import {join} from "node:path";
++import {buildCompiler,buildReact,compiler,fixture,root,run,target} from "./support";
++
++test("React hook handles keep their public generic types and runtime identity",async()=>{
++  buildReact();
++  const dir=fixture("declarations-react-handles");
++  writeFileSync(join(dir,"lib.rs"),`use react::{Dispatch,ForwardedRef,RefObject,SetOptimistic,SetStateAction};
++pub struct State {
++    pub setter: &'static Dispatch<SetStateAction<u32>>,
++    pub dispatch: Dispatch<String>,
++    pub optimistic: SetOptimistic<u32>,
++    pub reference: RefObject<Option<u32>>,
++    pub forwarded: ForwardedRef<u32>,
++}
++pub fn keep(state: State) -> State { state }
++`);
++  run([compiler,"--declarations",join(dir,"lib.rs"),"-o",join(dir,"lib.js"),"--","--extern",`react=${join(target,"libreact.rmeta")}`,"-L",target],30_000);
++  const declaration=readFileSync(join(dir,"lib.d.ts"),"utf8");
++  expect(declaration).not.toMatch(/\bany\b/);
++  expect(declaration).toContain("reference: RefObject<");
++  writeFileSync(join(dir,"use.ts"),`import {keep} from "./lib.js";
++import type {Dispatch,ForwardedRef,RefObject,SetStateAction} from "react";
++declare const state: ReturnType<typeof keep>;
++const setter: Dispatch<SetStateAction<number>> = state.setter;
++setter(1);
++state.setter(previous => previous + 1);
++state.dispatch("action");
++state.optimistic(previous => previous + 1);
++const reference: RefObject<number | null | undefined> = state.reference;
++const forwarded: ForwardedRef<number> = state.forwarded;
++// @ts-expect-error Numeric state does not accept text.
++state.setter("wrong");
++// @ts-expect-error Updaters must return the numeric state type.
++state.setter(previous => "wrong");
++// @ts-expect-error Dispatch retains its action type.
++state.dispatch(123);
++// @ts-expect-error Optimistic state retains its state type.
++state.optimistic("wrong");
++// @ts-expect-error A ref retains the type of its current value.
++state.reference.current = "wrong";
++// @ts-expect-error A forwarded callback retains its pointee type.
++const wrong: typeof state.forwarded = (value: string) => {};
++`);
++  writeFileSync(join(dir,"tsconfig.json"),JSON.stringify({compilerOptions:{module:"esnext",moduleResolution:"bundler",strict:true,noEmit:true,skipLibCheck:false,exactOptionalPropertyTypes:true,typeRoots:[join(root,"node_modules/@types")]},files:["use.ts"]}));
++  const checked=Bun.spawnSync([process.execPath,join(root,"node_modules/typescript/bin/tsc"),"-p",join(dir,"tsconfig.json")],{timeout:30_000,stdout:"pipe",stderr:"pipe"});
++  expect(checked.stdout.toString()+checked.stderr.toString()).toBe("");
++  expect(checked.exitCode).toBe(0);
++  const generated=await import(join(dir,"lib.js"));
++  const callback=()=>{};
++  const state={setter:callback,dispatch:callback,optimistic:callback,reference:{current:1},forwarded:callback};
++  expect(generated.keep(state)).toBe(state);
++  expect(generated.keep(state).setter).toBe(callback);
++  expect(generated.keep(state).reference).toBe(state.reference);
++});
++
++test("React 18 refs use the mutable canonical type with the exact payload",()=>{
++  buildCompiler();
++  const dir=fixture("declarations-react18-ref");
++  const metadata=join(dir,"metadata");
++  mkdirSync(metadata,{recursive:true});
++  run(["react/build.sh","-o",join(metadata,"libreact.rmeta"),"--react","18.0"],30_000);
++  writeFileSync(join(dir,"lib.rs"),"use react::RefObject;\npub fn reference(value: RefObject<u32>) -> RefObject<u32> { value }\n");
++  run([compiler,"--declarations",join(dir,"lib.rs"),"-o",join(dir,"lib.js"),"--","--extern",`react=${join(metadata,"libreact.rmeta")}`,"-L",metadata],30_000);
++  const declaration=readFileSync(join(dir,"lib.d.ts"),"utf8");
++  expect(declaration).toContain("MutableRefObject<number>");
++  expect(declaration).not.toMatch(/\bany\b/);
++  writeFileSync(join(dir,"use.ts"),`import {reference} from "./lib.js";
++const ref=reference({current:1});
++ref.current=2;
++const value: number = ref.current;
++// @ts-expect-error The mutable ref retains its numeric payload.
++ref.current="wrong";
++`);
++  // MutableRefObject retains this exact mutable payload shape in React 18
++  // and the installed React types. The alias assertion checks version selection.
++  writeFileSync(join(dir,"tsconfig.json"),JSON.stringify({compilerOptions:{module:"esnext",moduleResolution:"bundler",strict:true,noEmit:true,skipLibCheck:false,typeRoots:[join(root,"node_modules/@types")]},files:["use.ts"]}));
++  const checked=Bun.spawnSync([process.execPath,join(root,"node_modules/typescript/bin/tsc"),"-p",join(dir,"tsconfig.json")],{timeout:30_000,stdout:"pipe",stderr:"pipe"});
++  expect(checked.stdout.toString()+checked.stderr.toString()).toBe("");
++  expect(checked.exitCode).toBe(0);
++});
+diff --git a/test/diagnostics.test.ts b/test/diagnostics.test.ts
+index 515f282..f31f794 100644
+--- a/test/diagnostics.test.ts
++++ b/test/diagnostics.test.ts
+@@ -224,10 +224,8 @@ for (const [name, source, message, crate] of [
+   ["slice::from_mut of an object", "pub fn f() -> usize { let mut v = vec![1u8]; std::slice::from_mut(&mut v).len() }", "`slice::from_mut` of a `std::vec::Vec<u8>`, an object, whose place `s[0] = other` would replace (#1336)"],
+   // Each refusal of an open issue names it: a value made a `dyn Iterator`
+   // whose hint isn't std's as it's made, in a crate that asks one's
+-  // (#1563), a `Cow`'s `AsRef` given to generic code (#1481), and generic
+-  // code's `BuildHasher` methods (#1482).
++  // (#1563), and generic code's `BuildHasher` methods (#1482).
+   ["a dyn Iterator of chars whose size_hint is asked", "pub fn f(s: &str) -> (usize, Option<usize>) { let it: Box<dyn Iterator<Item = u32> + '_> = Box::new(s.chars().filter(|c| c.is_alphabetic()).map(|c| c as u32)); it.size_hint() }", "made a `dyn Iterator` in a crate that asks a `dyn Iterator`'s `size_hint()`, as its hint isn't std's as it's made (#1563)"],
+-  ["a Cow given as an AsRef<str>", "use std::borrow::Cow;\nfn upper<T: AsRef<str>>(t: T) -> String { t.as_ref().to_uppercase() }\npub fn f() -> String { upper(Cow::Borrowed(\"cow\")) }", "implementation evidence for `<std::borrow::Cow<'_, str> as std::convert::AsRef<str>>` (#1481)"],
+   ["a BuildHasher's method in generic code", "use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};\nfn built<B: BuildHasher>(b: &B) -> B::Hasher { b.build_hasher() }\npub fn f() -> DefaultHasher { built(&BuildHasherDefault::<DefaultHasher>::default()) }", "calling `std::hash::BuildHasher::build_hasher` (#1482)"],
+   // A `BufReader`'s `{:?}` shows its buffer's fill, which is refused for now
+   // (#1418).

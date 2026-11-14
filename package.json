@@ -25,6 +25,7 @@
     "@playwright/test": "1.65.0",
     "vite": "8.3.8",
     "@tailwindcss/vite": "4.3.3",
-    "tailwindcss": "4.3.3"
+    "tailwindcss": "4.3.3",
+    "@vgpu/wgsl": "0.6.0"
   }
 }
